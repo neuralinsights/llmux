@@ -7,6 +7,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #320 | 8:00 PM | ✅ | Codex Configuration File Internationalized | ~419 |
 | #225 | 5:15 PM | 🟣 | AI-CLI Server v3.0.0 - Complete Production Enhancement Suite | ~533 |
 | #207 | 4:19 PM | 🔵 | Codex Configuration: Multi-Provider AI Model Support | ~306 |
 </claude-mem-context>

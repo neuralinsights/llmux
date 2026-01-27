@@ -423,6 +423,8 @@ The unique advantage of LLMux is using CLI sessions instead of API keys:
 
 3. Mount these directories when deploying to containers
 
+4. (Optional) For Codex with custom Ollama, copy and customize `config/codex.toml` to `~/.codex/config.toml`
+
 **Benefits:**
 - No API key management required
 - Uses CLI free tier quotas
