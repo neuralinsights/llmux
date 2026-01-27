@@ -1,0 +1,80 @@
+# LLMux v3.0.0 - Docker Compose Configuration
+#
+# Usage:
+#   docker-compose up -d              # Default start
+#   docker-compose --profile ollama up -d  # Start with Ollama
+#
+# Environment variables can be overridden via .env file or command line
+
+version: '3.8'
+
+services:
+  llmux:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: llmux:3.0.0
+    container_name: ${CONTAINER_NAME:-llmux}
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8765}:8765"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=8765
+      - TZ=${TZ:-UTC}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - DEFAULT_PROVIDER=${DEFAULT_PROVIDER:-claude}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-120000}
+      - HOME=/root
+      # Cache configuration
+      - CACHE_TTL=${CACHE_TTL:-3600000}
+      - CACHE_MAX_SIZE=${CACHE_MAX_SIZE:-1000}
+      # API Key authentication (optional)
+      - API_KEY_REQUIRED=${API_KEY_REQUIRED:-false}
+      - API_KEY=${API_KEY:-}
+      - ADMIN_KEY=${ADMIN_KEY:-}
+    volumes:
+      # Application code (hot reload for development)
+      - ./server.js:/app/server.js:ro
+      - ./logs:/app/logs
+      - ./data:/app/data
+      # CLI Session authentication directories
+      - ${CLAUDE_SESSION:-~/.claude}:/root/.claude:ro
+      - ${CODEX_SESSION:-~/.codex}:/root/.codex:ro
+      - ${GEMINI_SESSION:-~/.gemini}:/root/.gemini:ro
+      - ${GCLOUD_CONFIG:-~/.config/gcloud}:/root/.config/gcloud:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - llmux-network
+
+  # Optional: Ollama service (start with --profile ollama)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    profiles:
+      - ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - llmux-network
+    # GPU support (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+networks:
+  llmux-network:
+    driver: bridge
+
+volumes:
+  ollama_data:

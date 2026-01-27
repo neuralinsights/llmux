@@ -1,0 +1,45 @@
+{
+  "name": "llmux",
+  "version": "3.0.0",
+  "description": "LLMux - LLM Multiplexer. Unified multi-provider AI gateway with streaming, smart caching, weighted load balancing, and Prometheus metrics",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/*.js",
+    "health": "curl -s http://localhost:8765/health | jq",
+    "metrics": "curl -s http://localhost:8765/metrics"
+  },
+  "keywords": [
+    "llmux",
+    "ai",
+    "llm",
+    "gateway",
+    "multiplexer",
+    "claude",
+    "openai",
+    "gemini",
+    "ollama",
+    "codex",
+    "api",
+    "proxy",
+    "streaming"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}

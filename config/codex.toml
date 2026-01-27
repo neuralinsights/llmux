@@ -1,0 +1,35 @@
+# Codex CLI 配置文件
+# 放置于容器内 /root/.codex/config.toml
+
+# 默认模型提供商
+model_provider = "openai"
+
+# 本地Ollama提供商配置
+[model_providers.ollama]
+name = "Ollama"
+base_url = "http://192.168.80.12:11434/v1"
+
+# LM Studio提供商配置 (备选)
+[model_providers.lmstudio]
+name = "LM Studio"
+base_url = "http://localhost:1234/v1"
+
+# 配置文件: 使用Ollama的qwen3:14b
+[profiles.ollama-qwen]
+model_provider = "ollama"
+model = "qwen3:14b"
+
+# 配置文件: 使用OpenAI
+[profiles.openai]
+model_provider = "openai"
+model = "gpt-4o"
+
+# 沙盒配置
+[sandbox]
+# read-only, workspace-write, danger-full-access
+mode = "workspace-write"
+
+# 审批策略
+[approval]
+# untrusted, on-failure, on-request, never
+mode = "never"
