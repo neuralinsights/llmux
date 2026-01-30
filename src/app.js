@@ -51,6 +51,11 @@ const contextInjector = require('./context/injector');
 const conversationHistory = require('./context/history');
 const entityExtractor = require('./context/extractor');
 
+// ============ Self-Optimizing Engine (Phase 4) ============
+const shadowRouter = require('./routing/shadow');
+const weightOptimizer = require('./routing/weight_optimizer');
+weightOptimizer.start(); // Start background weight updates
+
 // ============ Inspector / Socket.io Setup ============
 const io = new Server(server, {
   cors: {
@@ -155,6 +160,9 @@ app.use('/api/webhooks', webhookRoutes);
 
 const vectorRoutes = require('./routes/vector');
 app.use('/api/vector', vectorRoutes);
+
+const evaluationRoutes = require('./routes/evaluation'); // [Phase 4]
+app.use('/api/evaluation', evaluationRoutes);
 
 /**
  * Health check endpoint
@@ -384,6 +392,19 @@ app.post('/api/smart', validateGenerateRequest, async (req, res) => {
 
     // 5. Extract entities (async, non-blocking)
     entityExtractor.extractFromConversation(originalPrompt, result.response);
+
+    // 6. Execute shadow routing for A/B testing (Phase 4, async)
+    shadowRouter.executeShadow({
+      prompt: originalPrompt,
+      options: {
+        ...options,
+        taskType: routingDecision.taskType,
+        primaryDuration: Date.now() - startTime
+      },
+      primaryProvider: result.provider,
+      primaryResponse: result.response,
+      requestId
+    }).catch(err => console.error('[Shadow] Execution failed:', err.message));
 
     res.json({
       model: result.model,
