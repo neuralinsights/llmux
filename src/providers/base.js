@@ -41,9 +41,9 @@ class QuotaState {
   /**
    * Mark quota as exhausted and start cooldown
    * @param {string} error - Error message
-   * @param {number} cooldownTime - Cooldown time in ms
+   * @param {number} cooldownTime - Cooldown time in ms (default: 10 minutes)
    */
-  markExhausted(error, cooldownTime) {
+  markExhausted(error, cooldownTime = 600000) {
     this.available = false;
     this.lastError = error;
     this.cooldownUntil = Date.now() + cooldownTime;
@@ -60,6 +60,7 @@ class QuotaState {
     this.available = true;
     this.cooldownUntil = null;
     this.lastError = null;
+    this.requestCount = 0;
   }
 
   /**

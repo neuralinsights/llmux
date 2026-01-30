@@ -97,7 +97,7 @@ app.get('/health', async (req, res) => {
       maxSize: cacheStats.maxSize,
       hitRate: cacheStats.hitRate || 'N/A',
     },
-    activeRequests: metrics.getActiveRequests(),
+    activeRequests: metrics.activeRequests,
     availableProviders: availableProviders.map((p) => p.name),
     defaultProvider: env.DEFAULT_PROVIDER,
   };
