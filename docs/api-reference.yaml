@@ -1,0 +1,660 @@
+openapi: 3.0.3
+info:
+  title: LLMux API
+  description: |
+    LLMux is a unified AI CLI HTTP gateway that provides intelligent routing
+    across multiple LLM providers (Claude, Gemini, Codex, Ollama).
+
+    ## Features
+    - Smart routing with weighted load balancing
+    - OpenAI-compatible API
+    - Streaming responses (SSE)
+    - Response caching
+    - Prometheus metrics
+    - Rate limiting
+
+    ## Authentication
+    API key authentication is optional and controlled by `API_KEY_REQUIRED` env var.
+    When enabled, include the API key in the `X-API-Key` header.
+  version: 3.0.0
+  contact:
+    name: LLMux Team
+    url: https://github.com/neuralinsights/llmux
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3456
+    description: Local development server
+  - url: https://llmux.example.com
+    description: Production server
+
+tags:
+  - name: Generation
+    description: Text generation endpoints
+  - name: Models
+    description: Model information endpoints
+  - name: Health
+    description: Health and monitoring endpoints
+  - name: Cache
+    description: Cache management endpoints
+  - name: Quota
+    description: Quota management endpoints
+
+paths:
+  /api/smart:
+    post:
+      tags: [Generation]
+      summary: Smart routing generation
+      description: |
+        Generate text using intelligent provider selection based on weights and availability.
+        This is the recommended endpoint for most use cases.
+      operationId: smartGenerate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRequest'
+      responses:
+        '200':
+          description: Successful generation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResponse'
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE stream for streaming responses
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/generate:
+    post:
+      tags: [Generation]
+      summary: Generate with specific provider
+      description: Generate text using a specified provider or default provider.
+      operationId: generate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRequest'
+      responses:
+        '200':
+          description: Successful generation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResponse'
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/chat/completions:
+    post:
+      tags: [Generation]
+      summary: OpenAI-compatible chat completions
+      description: |
+        Generate chat completions using the OpenAI API format.
+        Supports streaming via `stream: true`.
+      operationId: chatCompletions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Successful completion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/OpenAIBadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/models:
+    get:
+      tags: [Models]
+      summary: List available models
+      description: Returns a list of available models in OpenAI format.
+      operationId: listModels
+      responses:
+        '200':
+          description: List of models
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelList'
+
+  /api/tags:
+    get:
+      tags: [Models]
+      summary: List model tags (Ollama compatible)
+      description: Returns available models in Ollama format.
+      operationId: listTags
+      responses:
+        '200':
+          description: List of model tags
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        provider:
+                          type: string
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: |
+        Returns health status of the gateway.
+        Use `?deep=true` for provider health checks.
+      operationId: healthCheck
+      parameters:
+        - name: deep
+          in: query
+          description: Perform deep health check on all providers
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Unhealthy (some providers down)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      description: Returns metrics in Prometheus text format.
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP llmux_requests_total Total number of requests
+                  # TYPE llmux_requests_total counter
+                  llmux_requests_total{provider="claude",status="success"} 42
+
+  /api/quota:
+    get:
+      tags: [Quota]
+      summary: Get quota status
+      description: Returns quota usage for all providers.
+      operationId: getQuota
+      responses:
+        '200':
+          description: Quota status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaStatus'
+
+  /api/quota/reset:
+    post:
+      tags: [Quota]
+      summary: Reset quota
+      description: Reset quota for a specific provider or all providers.
+      operationId: resetQuota
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  description: Provider name (optional, resets all if omitted)
+      responses:
+        '200':
+          description: Quota reset successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  provider:
+                    type: string
+
+  /api/cache/stats:
+    get:
+      tags: [Cache]
+      summary: Get cache statistics
+      description: Returns cache hit/miss statistics.
+      operationId: getCacheStats
+      responses:
+        '200':
+          description: Cache statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheStats'
+
+  /api/cache/clear:
+    post:
+      tags: [Cache]
+      summary: Clear cache
+      description: Clear all cached responses.
+      operationId: clearCache
+      responses:
+        '200':
+          description: Cache cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cleared:
+                    type: integer
+                    description: Number of entries cleared
+
+components:
+  schemas:
+    GenerateRequest:
+      type: object
+      required:
+        - prompt
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 100000
+          description: The prompt to generate from
+        provider:
+          type: string
+          enum: [claude, gemini, codex, ollama]
+          description: LLM provider to use
+        model:
+          type: string
+          description: Specific model to use
+        stream:
+          type: boolean
+          default: false
+          description: Enable streaming response
+        options:
+          type: object
+          properties:
+            temperature:
+              type: number
+              minimum: 0
+              maximum: 2
+              description: Sampling temperature
+            maxTokens:
+              type: integer
+              minimum: 1
+              maximum: 100000
+              description: Maximum tokens to generate
+            topP:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: Top-p sampling
+            topK:
+              type: integer
+              minimum: 1
+              description: Top-k sampling
+            stopSequences:
+              type: array
+              maxItems: 10
+              items:
+                type: string
+              description: Stop sequences
+
+    GenerateResponse:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Generated text
+        provider:
+          type: string
+          description: Provider used
+        model:
+          type: string
+          description: Model used
+        usage:
+          type: object
+          properties:
+            inputTokens:
+              type: integer
+            outputTokens:
+              type: integer
+            totalTokens:
+              type: integer
+        cached:
+          type: boolean
+          description: Whether response was from cache
+        latency:
+          type: number
+          description: Response latency in milliseconds
+
+    ChatCompletionRequest:
+      type: object
+      required:
+        - model
+        - messages
+      properties:
+        model:
+          type: string
+          description: Model ID (e.g., "claude-sonnet-4-20250514", "gpt-4")
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            type: object
+            required:
+              - role
+              - content
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant]
+              content:
+                type: string
+              name:
+                type: string
+                maxLength: 64
+        stream:
+          type: boolean
+          default: false
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        max_tokens:
+          type: integer
+          minimum: 1
+          maximum: 100000
+        top_p:
+          type: number
+          minimum: 0
+          maximum: 1
+        frequency_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        presence_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        stop:
+          oneOf:
+            - type: string
+            - type: array
+              maxItems: 4
+              items:
+                type: string
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          enum: [chat.completion]
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              message:
+                type: object
+                properties:
+                  role:
+                    type: string
+                  content:
+                    type: string
+              finish_reason:
+                type: string
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+
+    ModelList:
+      type: object
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              object:
+                type: string
+                enum: [model]
+              created:
+                type: integer
+              owned_by:
+                type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        uptime:
+          type: number
+          description: Uptime in seconds
+        availableProviders:
+          type: array
+          items:
+            type: string
+        providers:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              available:
+                type: boolean
+              model:
+                type: string
+        cache:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            size:
+              type: integer
+            hits:
+              type: integer
+            misses:
+              type: integer
+        deepCheck:
+          type: object
+          description: Present only when deep=true
+
+    QuotaStatus:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          used:
+            type: integer
+            description: Tokens used
+          limit:
+            type: integer
+            description: Token limit
+          remaining:
+            type: integer
+            description: Tokens remaining
+          percentage:
+            type: number
+            description: Usage percentage
+
+    CacheStats:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        size:
+          type: integer
+        maxSize:
+          type: integer
+        hits:
+          type: integer
+        misses:
+          type: integer
+        hitRate:
+          type: number
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+
+    OpenAIError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+            code:
+              type: string
+            param:
+              type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missingPrompt:
+              value:
+                error: "prompt is required"
+                code: "MISSING_PROMPT"
+                details: []
+            invalidProvider:
+              value:
+                error: "Unknown provider"
+                code: "INVALID_PROVIDER"
+
+    OpenAIBadRequest:
+      description: Invalid request (OpenAI format)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OpenAIError'
+          example:
+            error:
+              message: "messages is required"
+              type: "invalid_request_error"
+              code: "invalid_type"
+              param: "messages"
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        RateLimit:
+          schema:
+            type: string
+          description: "Rate limit info (limit=X, remaining=Y, reset=Z)"
+        RateLimit-Policy:
+          schema:
+            type: string
+          description: "Rate limit policy (e.g., 100;w=60)"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: "Rate limit exceeded"
+            code: "RATE_LIMITED"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication (optional, depends on server config)
+
+security:
+  - {}
+  - ApiKeyAuth: []
