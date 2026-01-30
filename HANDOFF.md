@@ -1,18 +1,19 @@
-# LLMux v5.0 (Phase 1-3 Complete) 交割文档
+# LLMux v5.0 (All 4 Phases Complete) 交割文档
 
-> **交割时间**: 2026-01-30 17:45 NZDT  
-> **完成状态**: Phase 1 (Inspector) + Phase 2 (Privacy Engine) + Phase 3 (Context Mesh) 已完成  
+> **交割时间**: 2026-01-30 18:15 NZDT  
+> **完成状态**: Phase 1-4 全部完成 ✅  
 > **测试状态**: ✅ 所有核心功能已验证
 
 ---
 
 ## 执行摘要
 
-v5.0 演进的三个阶段全部完成，实现了从"黑盒路由"到"智能记忆网关"的跨越：
+v5.0 演进的四个阶段全部完成，实现了从"黑盒路由"到"自优化智能网关"的完整跨越：
 
 1. **Live Flow Inspector (Phase 1)**: 实时可视化面板，WebSocket 推送所有请求生命周期事件。
 2. **Hybrid Privacy Engine (Phase 2)**: PII 自动检测、系统资源监控、复杂度感知路由。
 3. **Stateful Context Mesh (Phase 3)**: 透明记忆注入，基于 384 维语义嵌入的自动上下文检索。
+4. **Self-Optimizing Engine (Phase 4)**: Shadow routing A/B 测试、LLM-as-judge 自动评分、动态权重优化。
 
 ### 新增核心功能
 
@@ -41,11 +42,36 @@ v5.0 演进的三个阶段全部完成，实现了从"黑盒路由"到"智能记
 - **Entity Extraction**: 正则提取人名、项目、日期、邮箱、金额等实体。
 - **Dashboard 事件**: 新增 `CONTEXT_INJECTION` 和 `MEMORY_STORED` 事件追踪。
 
+#### 4. Self-Optimizing Engine (Phase 4) 🆕
+- **Shadow Router** (`src/routing/shadow.js`): 
+    - 可配置采样率 (默认 5%) 并行发送请求到多个 Provider。
+    - 异步执行，不阻塞主响应。
+    - 存储对比结果到队列供 Judge 评估。
+- **Judge-as-a-Service** (`src/evaluation/judge.js`):
+    - 使用 Claude Sonnet 4 作为评委。
+    - 5 维度评分 (Correctness, Relevance, Clarity, Completeness, Conciseness)。
+    - 返回结构化 JSON: `{ winner, scores, reasoning }`。
+- **Metrics Collector** (`src/evaluation/metrics_collector.js`):
+    - 聚合性能数据：胜率、平均分、延迟 (P50/P95/P99)。
+    - 按 Provider 和 TaskType 分类统计。
+    - 滚动窗口存储 (最近 1000 条评估)。
+- **Dynamic Weight Optimizer** (`src/routing/weight_optimizer.js`):
+    - 基于性能自动调整 Provider 权重。
+    - 算法：简化版 Multi-Armed Bandit。
+    - 约束：最小 5%，最大 70%，单次最大变化 ±10%。
+    - 更新频率：每 24 小时 (可手动触发)。
+- **Admin API** (`src/routes/evaluation.js`): 新增 `/api/evaluation/*` 端点用于监控和管理。
+- **测试结果**:
+    - ✅ Shadow 采样正常 (20 请求触发 1 次，符合 5%)
+    - ✅ Judge 调用成功 (处理 1 个对比)
+    - ✅ Metrics 聚合正常 (记录延迟和任务类型)
+    - ✅ Admin API 全部端点正常工作
+
 ---
 
 ## 变更文件清单
 
-### 新增 (Phase 1-3)
+### 新增 (Phase 1-4)
 - `src/telemetry/inspector.js`: Inspector SDK (Event Bus)
 - `src/resilience/resource_monitor.js`: 系统资源监控
 - `src/routing/privacy_guard.js`: PII 正则库与检测逻辑
@@ -54,16 +80,25 @@ v5.0 演进的三个阶段全部完成，实现了从"黑盒路由"到"智能记
 - `src/context/history.js`: **[Phase 3]** 对话历史存储
 - `src/context/injector.js`: **[Phase 3]** 透明上下文注入中间件
 - `src/context/extractor.js`: **[Phase 3]** 实体提取 (NER)
+- `src/routing/shadow.js`: **[Phase 4]** Shadow routing 并行执行
+- `src/evaluation/judge.js`: **[Phase 4]** LLM-as-judge 评估服务
+- `src/evaluation/metrics_collector.js`: **[Phase 4]** 性能指标聚合
+- `src/routing/weight_optimizer.js`: **[Phase 4]** 动态权重优化器
+- `src/routes/evaluation.js`: **[Phase 4]** 评估管理 API
 - `public/dashboard/index.html`: 单页监控面板前端
 - `scripts/demo_traffic.js`: 流量生成脚本 (测试用)
 - `scripts/demo_privacy.js`: 隐私/复杂度测试脚本
 - `scripts/demo_memory.js`: **[Phase 3]** 记忆系统测试脚本
+- `scripts/demo_optimizer.js`: **[Phase 4]** 优化器完整测试脚本
+- `scripts/demo_optimizer_simple.js`: **[Phase 4]** 优化器简化测试
 
 ### 修改
 - `src/app.js`: 
     - 集成 Socket.io Server，挂载 Inspector 中间件。
     - **[Phase 3]** 添加 `contextInjector.middleware()` (pre-request)。
     - **[Phase 3]** 添加 `conversationHistory.store()` (post-response)。
+    - **[Phase 4]** 添加 `shadowRouter.executeShadow()` (post-response, async)。
+    - **[Phase 4]** 启动 `weightOptimizer.start()` (background job)。
 - `src/routing/ai_router.js`: 重构为 `SemanticRouter`，集成 Privacy/Complexity 分析。
 - `src/config/index.js`: 为 Ollama 添加 `secure: true` 标记。
 - `package.json`: 

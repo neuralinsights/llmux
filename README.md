@@ -4,13 +4,14 @@
 
 ## Features
 
-### 🆕 v5.0 Evolution (Phase 1-3 Complete)
+### 🆕 v5.0 Evolution (All 4 Phases Complete)
 
 - **Live Flow Inspector** - Real-time WebSocket dashboard for request trace visualization
 - **Privacy Engine** - Automatic PII detection & secure routing enforcement
 - **Resource Aware Routing** - System health monitoring & intelligent load shedding
 - **Stateful Context Mesh** - Transparent memory injection with semantic search (384-dim embeddings)
 - **Entity Extraction** - Automatic NER for people, projects, dates from conversations
+- **Self-Optimizing Engine** - Shadow routing, LLM-as-judge evaluation & dynamic weight adjustment
 
 ### Core Features
 
@@ -126,6 +127,11 @@ Different runtimes use different addresses to access host services (e.g., Ollama
 | `CONTEXT_INJECTION_ENABLED` | `true` | Enable transparent context injection |
 | `MAX_CONTEXT_CHUNKS` | `3` | Max memory chunks to inject |
 | `CONTEXT_RELEVANCE_THRESHOLD` | `0.7` | Min similarity score (0-1) |
+| `ENABLE_SHADOW` | `false` | Enable shadow routing for A/B testing (Phase 4) |
+| `SHADOW_RATE` | `0.05` | Shadow sampling rate (0.05 = 5%) |
+| `JUDGE_PROVIDER` | `claude` | Provider for LLM-as-judge evaluation |
+| `JUDGE_MODEL` | `claude-sonnet-4` | Model for quality scoring |
+| `WEIGHT_UPDATE_INTERVAL` | `86400000` | Weight update frequency (ms, 24h default) |
 
 ## API Endpoints
 
