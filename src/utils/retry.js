@@ -14,11 +14,17 @@ function sleep(ms) {
 
 /**
  * Check if error is a quota/rate limit error
- * @param {Error|string} error - Error to check
+ * @param {Error|Object|string} error - Error to check
  * @returns {boolean}
  */
 function isQuotaError(error) {
-  const msg = (error.message || error || '').toLowerCase();
+  // Check status code first
+  if (error && typeof error === 'object' && error.status === 429) {
+    return true;
+  }
+
+  // Check message content
+  const msg = String(error?.message || error || '').toLowerCase();
   return (
     msg.includes('rate limit') ||
     msg.includes('quota') ||
@@ -31,11 +37,25 @@ function isQuotaError(error) {
 
 /**
  * Check if error is retryable (transient)
- * @param {Error|string} error - Error to check
+ * @param {Error|Object|string} error - Error to check
  * @returns {boolean}
  */
 function isRetryableError(error) {
-  const msg = (error.message || error || '').toLowerCase();
+  // Check status code for retryable HTTP errors
+  if (error && typeof error === 'object') {
+    const status = error.status || error.statusCode;
+    if (status === 429 || (status >= 500 && status < 600)) {
+      return true;
+    }
+    // Check for network error codes
+    const code = error.code;
+    if (['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENETUNREACH'].includes(code)) {
+      return true;
+    }
+  }
+
+  // Check message content
+  const msg = String(error?.message || error || '').toLowerCase();
   return (
     msg.includes('timeout') ||
     msg.includes('econnreset') ||
