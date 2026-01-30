@@ -44,13 +44,30 @@ class PluginRegistry {
      * @param  {...any} args - Additional arguments
      */
     async executeHook(hookName, context, ...args) {
+        // Try to resolve requestId for tracing
+        let requestId = null;
+        if (context) {
+            if (context.req && context.req.inspectorId) requestId = context.req.inspectorId;
+            else if (context.context && context.context.inspectorId) requestId = context.context.inspectorId; // context.context is the req object passed in onPrompt
+        }
+
+        if (requestId) {
+            require('../telemetry/inspector').trace(requestId, 'PLUGIN_EXEC_START', { hook: hookName });
+        }
+
         if (!this.hooks[hookName]) return;
 
         for (const { pluginName, handler } of this.hooks[hookName]) {
             try {
+                if (requestId) {
+                    require('../telemetry/inspector').trace(requestId, 'PLUGIN_RUN', { plugin: pluginName, hook: hookName });
+                }
                 await handler(context, ...args);
             } catch (err) {
                 console.error(`[PLUGINS] Error in ${hookName} from ${pluginName}:`, err);
+                if (requestId) {
+                    require('../telemetry/inspector').trace(requestId, 'PLUGIN_ERROR', { plugin: pluginName, error: err.message });
+                }
                 // We generally continue executing other hooks even if one fails, generic error handling
             }
         }

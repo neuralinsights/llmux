@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLMux Live Flow Inspector</title>
+    <!-- Socket.io Client (CDN) -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: sans-serif;
+        }
+
+        .card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .selected {
+            background-color: #334155;
+            border-left: 4px solid #10b981;
+        }
+    </style>
+</head>
+
+<body class="flex h-screen overflow-hidden">
+
+    <!-- Sidebar -->
+    <div class="w-1/3 border-r border-slate-700 flex flex-col bg-slate-900">
+        <div class="p-4 border-b border-slate-700 bg-slate-800 flex justify-between items-center">
+            <div>
+                <h1 class="font-bold text-lg text-emerald-400">LLMux Inspector</h1>
+                <div id="system-health" class="text-xs text-slate-400 mt-1">System: <span
+                        class="text-green-500">HEALTHY</span></div>
+            </div>
+            <div id="status-indicator" class="w-3 h-3 rounded-full bg-red-500" title="Disconnected"></div>
+        </div>
+        <div id="request-list" class="overflow-y-auto flex-1">
+            <!-- Items injected here -->
+            <div class="p-8 text-center text-slate-500 text-sm">Waiting for connection...</div>
+        </div>
+    </div>
+
+    <!-- Detail View -->
+    <div class="flex-1 bg-slate-950 overflow-y-auto p-6" id="detail-view">
+        <div class="h-full flex items-center justify-center text-slate-500">
+            Select a request to view trace details
+        </div>
+    </div>
+
+    <script>
+        // State
+        const state = {
+            events: [],
+            requests: {}, // Map<requestId, {id, method, status, duration, startTime, events: []}>
+            selectedId: null
+        };
+
+        // DOM Elements
+        const elStatus = document.getElementById('status-indicator');
+        const elList = document.getElementById('request-list');
+        const elDetail = document.getElementById('detail-view');
+
+        // Socket.io
+        let socket;
+        try {
+            // Explicitly connect to localhost:8765 with forced transports
+            socket = io('http://localhost:8765', {
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionAttempts: 10
+            });
+        } catch (e) {
+            console.error("Socket Init Error:", e);
+            document.body.innerHTML += `<div style="color:red; pa:10px">Socket Init Error: ${e.message}</div>`;
+        }
+
+        if (socket) {
+            socket.on('connect', () => {
+                console.log('Connected');
+                elStatus.className = "w-3 h-3 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]";
+                elList.innerHTML = '<div class="p-8 text-center text-slate-500 text-sm">Waiting for requests...</div>';
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Disconnected');
+                elStatus.className = "w-3 h-3 rounded-full bg-red-500";
+            });
+
+            socket.on('connect_error', (err) => {
+                console.error('Connection Error:', err);
+                elStatus.className = "w-3 h-3 rounded-full bg-red-500 animate-pulse";
+                elList.innerHTML = `<div class="p-4 text-center text-red-400 text-xs">
+                    Connection Error: ${err.message}<br>
+                    Check console for details.
+                </div>`;
+            });
+
+            socket.on('history', (history) => {
+                console.log('History received:', history.length);
+                processEvents(history.reverse()); // History comes newest first usually? Our backend does unshift (newest first). 
+                // We want to process oldest to newest to build state correctly? 
+                // Actually inspector.js: this.history.unshift(payload). So index 0 is newest.
+                // We should process from oldest (end) to newest (0).
+                // .reverse() mutates? Yes.
+                const oldestFirst = [...history].reverse();
+                processEvents(oldestFirst);
+            });
+
+            socket.on('trace', (data) => {
+                processEvents([data]);
+            });
+        }
+
+        const elSystem = document.getElementById('system-health');
+
+        function processEvents(newEvents) {
+            newEvents.forEach(e => {
+                // System Health Updates
+                if (e.stage === 'SYSTEM_HEALTH') {
+                    const color = e.data.status === 'HEALTHY' ? 'text-green-500' : (e.data.status === 'DEGRADED' ? 'text-yellow-500' : 'text-red-500');
+                    if (elSystem) elSystem.innerHTML = `System: <span class="${color} font-bold">${e.data.status}</span> (CPU: ${(e.data.cpuLoad * 100).toFixed(0)}%)`;
+                    return;
+                }
+
+                if (!state.requests[e.requestId]) {
+                    state.requests[e.requestId] = {
+                        id: e.requestId,
+                        startTime: e.timestamp,
+                        events: [],
+                        method: 'UNKNOWN',
+                        status: 'PENDING',
+                        privacy: 'PUBLIC',
+                        complexity: 'UNKNOWN'
+                    };
+                }
+                const req = state.requests[e.requestId];
+                req.events.push(e);
+
+                // Metadata update
+                if (e.stage === 'INBOUND') {
+                    req.method = `${e.data.method} ${e.data.url}`;
+                }
+                if (e.stage === 'ROUTER_ANALYSIS') {
+                    req.privacy = e.data.privacy;
+                    req.complexity = e.data.complexity;
+                }
+                if (e.stage === 'OUTBOUND') {
+                    req.status = e.data.statusCode;
+                    req.duration = e.data.duration;
+                }
+            });
+            renderList();
+            if (state.selectedId) renderDetail(state.selectedId);
+        }
+
+        function renderList() {
+            // Sort requests by startTime desc
+            const sorted = Object.values(state.requests).sort((a, b) => b.startTime - a.startTime);
+
+            if (sorted.length === 0) return;
+
+            elList.innerHTML = sorted.map(req => `
+                <div onclick="selectRequest('${req.id}')" 
+                     class="p-3 border-b border-slate-700 cursor-pointer hover:bg-slate-700 transition ${state.selectedId === req.id ? 'selected' : ''}">
+                    <div class="flex justify-between mb-1">
+                        <span class="font-mono text-xs text-slate-400">#${req.id.slice(0, 8)}</span>
+                        <div class="flex gap-1">
+                            ${req.privacy !== 'PUBLIC' && req.privacy ? '<span class="text-[10px] px-1 rounded bg-red-900 text-red-300">PII</span>' : ''}
+                            <span class="text-xs px-1 rounded ${req.status === 200 ? 'bg-green-900 text-green-300' : 'bg-slate-600'}">
+                                ${req.status || '...'}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="font-bold text-sm truncate">${req.method}</div>
+                    <div class="text-xs text-slate-500 mt-1 flex gap-2">
+                        <span>${new Date(req.startTime).toLocaleTimeString()}</span>
+                        <span>• ${req.events.length} evs</span>
+                        ${req.complexity && req.complexity !== 'UNKNOWN' ? `<span class="text-purple-400">• ${req.complexity}</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window.selectRequest = function (id) {
+            state.selectedId = id;
+            renderList(); // Update active state
+            renderDetail(id);
+        };
+
+        function renderDetail(id) {
+            const req = state.requests[id];
+            if (!req) return;
+
+            const eventsHtml = req.events.sort((a, b) => a.timestamp - b.timestamp).map(ev => `
+                <div class="flex gap-4 group">
+                    <div class="flex flex-col items-center">
+                        <div class="w-0.5 h-full bg-slate-700"></div>
+                        <div class="w-3 h-3 rounded-full mt-1.5 shrink-0 ${getStageColor(ev.stage)}"></div>
+                        <div class="w-0.5 h-full bg-slate-700"></div>
+                    </div>
+                    <div class="flex-1 pb-6">
+                        <div class="card rounded p-3 text-sm">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="font-bold ${getStageText(ev.stage)}">${ev.stage}</span>
+                                <span class="text-xs text-slate-500 font-mono">+${ev.timestamp - req.startTime}ms</span>
+                            </div>
+                            <pre class="text-xs text-slate-300 overflow-x-auto bg-slate-950 p-2 rounded border border-slate-800">${JSON.stringify(ev.data, null, 2)}</pre>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            elDetail.innerHTML = `
+                <div class="mb-6 border-b border-slate-700 pb-4">
+                    <h2 class="text-2xl font-bold mb-2">Request Trace <span class="text-slate-500 text-lg">#${req.id}</span></h2>
+                    <div class="flex gap-4 text-sm text-slate-400">
+                        <span>Start: ${new Date(req.startTime).toISOString()}</span>
+                        <span>Duration: ${req.duration ? req.duration + 'ms' : 'In Progress...'}</span>
+                    </div>
+                </div>
+                <div class="space-y-4">${eventsHtml}</div>
+            `;
+        }
+
+        function getStageColor(stage) {
+            if (stage === 'INBOUND') return 'bg-blue-500';
+            if (stage === 'ROUTER_ANALYSIS') return 'bg-purple-500';
+            if (stage === 'ROUTER_SELECTION') return 'bg-purple-400';
+            if (stage.startsWith('PLUGIN')) return 'bg-yellow-500';
+            if (stage === 'OUTBOUND') return 'bg-green-500';
+            return 'bg-slate-500';
+        }
+
+        function getStageText(stage) {
+            if (stage === 'INBOUND') return 'text-blue-400';
+            if (stage === 'ROUTER_ANALYSIS') return 'text-purple-400';
+            if (stage === 'ROUTER_SELECTION') return 'text-purple-300';
+            if (stage.startsWith('PLUGIN')) return 'text-yellow-400';
+            if (stage === 'OUTBOUND') return 'text-green-400';
+            return 'text-slate-400';
+        }
+    </script>
+</body>
+
+</html>

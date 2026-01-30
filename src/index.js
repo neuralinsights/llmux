@@ -5,7 +5,7 @@
  * Entry point for the application
  */
 
-const { app, initializeCache } = require('./app');
+const { app, server, initializeCache } = require('./app');
 const { env, PROVIDER_CONFIG } = require('./config');
 const { initializeDatabase, getDatabase } = require('./db');
 const { initializeOtel } = require('./telemetry/otelSetup');
@@ -31,11 +31,11 @@ async function main() {
     console.log(`[INIT] Cache initialized (backend: ${env.CACHE_BACKEND})`);
 
     // Start HTTP server
-    app.listen(env.PORT, '0.0.0.0', () => {
+    server.listen(env.PORT, '0.0.0.0', () => {
       console.log(`
 ╔═══════════════════════════════════════════════════════════════════════════╗
 ║                         LLMux v3.0.0 - LLM Multiplexer                    ║
-║     Streaming | Smart Cache | Weighted Load Balancing | Prometheus | Auth ║
+║     Streaming | Smart Cache | Weighted Load Balancing | Prometheus | WebSockets ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  Port: ${String(env.PORT).padEnd(68)}║
 ║  Default Provider: ${env.DEFAULT_PROVIDER.padEnd(55)}║

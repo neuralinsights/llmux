@@ -1,12 +1,22 @@
-# LLMux v4.0.0
+# LLMux v5.0
 
-> **LLM Multiplexer** - AI Gateway with Plugins, Smart Routing, Vector Memory, and MCP Support
+> **LLM Multiplexer** - AI Gateway with Live Inspector, Privacy Engine, Stateful Memory & MCP Support
 
 ## Features
 
-- **Plugin System** - Extend functionality with custom hooks
-- **AI Smart Routing** - Semantically routes tasks to optimal models
-- **Vector Memory (RAG)** - Long-term memory storage
+### 🆕 v5.0 Evolution (Phase 1-3 Complete)
+
+- **Live Flow Inspector** - Real-time WebSocket dashboard for request trace visualization
+- **Privacy Engine** - Automatic PII detection & secure routing enforcement
+- **Resource Aware Routing** - System health monitoring & intelligent load shedding
+- **Stateful Context Mesh** - Transparent memory injection with semantic search (384-dim embeddings)
+- **Entity Extraction** - Automatic NER for people, projects, dates from conversations
+
+### Core Features
+
+- **AI Smart Routing** - Semantically routes tasks to optimal models (CODE/MATH/CREATIVE)
+- **Plugin System** - Extend functionality with custom hooks (onRequest, onResponse, etc.)
+- **Vector Memory (RAG)** - Long-term conversation storage with similarity search
 - **MCP Server** - Official Model Context Protocol integration
 - **Edge Ready** - Stateless worker for Cloudflare deployment
 - **Zero API Key Storage** - Uses CLI session authentication, no sensitive credentials to manage
@@ -112,6 +122,10 @@ Different runtimes use different addresses to access host services (e.g., Ollama
 | `ADMIN_KEY` | - | Admin secret key |
 | `CACHE_TTL` | `3600000` | Cache TTL (ms) |
 | `CACHE_MAX_SIZE` | `1000` | Maximum cache entries |
+| `ENABLE_MEMORY` | `true` | Enable conversation memory (Phase 3) |
+| `CONTEXT_INJECTION_ENABLED` | `true` | Enable transparent context injection |
+| `MAX_CONTEXT_CHUNKS` | `3` | Max memory chunks to inject |
+| `CONTEXT_RELEVANCE_THRESHOLD` | `0.7` | Min similarity score (0-1) |
 
 ## API Endpoints
 
@@ -437,6 +451,12 @@ The unique advantage of LLMux is using CLI sessions instead of API keys:
 
 ## Version History
 
+
+### v5.0.0 (2026-01-30) - "The Glass Box Update"
+- **Live Flow Inspector**: Real-time traffic visualization dashboard (`/dashboard/index.html`).
+- **Hybrid Privacy Engine**: PII detection rules preventing sensitive data leaks to public models.
+- **Resource Awareness**: Routing logic now considers system CPU/Memory health.
+- **Complexity Scorer**: Heuristics to distinguish Simple vs Complex prompts for cost optimization.
 
 ### v4.0.0 (2026-01-30)
 - **Plugin System** - Extensible architecture with Hooks

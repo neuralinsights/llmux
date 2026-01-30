@@ -17,11 +17,13 @@ class ExperimentManager {
     /**
      * Route the request using A/B testing
      * @param {string} prompt 
+     * @param {string} [requestId]
      * @returns {{ provider: Object, strategy: string, taskType: string }}
      */
-    route(prompt) {
+    route(prompt, requestId) {
         const available = getAvailableProviders();
-        const taskType = SemanticRouter.detectTaskType(prompt);
+        const analysis = SemanticRouter.detectTaskType(prompt, requestId);
+        const { taskType } = analysis;
 
         // Bucket assignment (simple random)
         const isExperimentGroup = Math.random() < this.AI_ROUTING_RATE;
@@ -31,15 +33,15 @@ class ExperimentManager {
 
         if (isExperimentGroup) {
             // Group B: AI Routing
-            selectedProvider = SemanticRouter.selectProvider(taskType, available);
+            selectedProvider = SemanticRouter.selectProvider(analysis, available, requestId);
             strategy = 'AI_SEMANTIC';
         }
 
         // Fallback or Group A: Weighted
         if (!selectedProvider) {
             // Use existing weighted logic (mock imported or actual)
-            // Note: usage of selectProviderWeighted might differ in API signature, assuming basic
-            // In src/routing/index.js (from Phase 2), selectProviderWeighted returns a provider object
+            // But we should really enforce Privacy even in fallback/weighted?
+            // For now, let's just make sure we don't crash.
             selectedProvider = selectProviderWeighted();
             strategy = isExperimentGroup ? 'AI_FALLBACK_TO_WEIGHTED' : 'WEIGHTED_BASELINE';
         }

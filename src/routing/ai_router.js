@@ -1,77 +1,126 @@
 /**
  * LLMux - AI Semantic Router
- * Routes requests based on intent analysis
+ * Routes requests based on intent analysis, privacy, and complexity.
  */
 
-// Simple keyword heuristics for "Zero-Shot" classification without heavy ML models
-const TASK_PATTERNS = {
-    CODE: [
-        /\b(function|class|const|let|var|return|import|export|def|print|console\.log)\b/,
-        /\b(python|javascript|java|cpp|golang|rust|typescript)\b/i,
-        /\b(write|create|debug|fix|refactor).+(code|function|script|app)\b/i
-    ],
-    MATH: [
-        /\b(calculate|solve|equation|theorem|algebra|calculus|geometry)\b/i,
-        /[\d\+\-\*\/^=]{5,}/ // Simple arithmetic patterns
-    ],
-    CREATIVE: [
-        /\b(write|compose|generate|create).+(story|poem|song|recipe|email|blog|article)\b/i,
-        /\b(imagine|fantasy|fiction|style of)\b/i
-    ],
-    ANALYSIS: [
-        /\b(analyze|summarize|explain|extract|compare|contrast|list)\b/i,
-        /\b(sentiment|key points|summary|meaning)\b/i
-    ]
-};
+const inspector = require('../telemetry/inspector');
+const PrivacyGuard = require('./privacy_guard');
+const ComplexityScorer = require('./complexity_scorer');
+const ResourceMonitor = require('../resilience/resource_monitor');
 
 class SemanticRouter {
     /**
-     * Detect task type from prompt
+     * Detect task type, privacy level, and complexity from prompt
      * @param {string} prompt 
-     * @returns {string} Task Type (CODE, MATH, CREATIVE, ANALYSIS, GENERAL)
+     * @param {string} [requestId] Optional request ID for tracing
+     * @returns {{taskType: string, privacy: Object, complexity: string}}
      */
-    static detectTaskType(prompt) {
-        if (!prompt) return 'GENERAL';
-        const text = prompt.toLowerCase();
+    static detectTaskType(prompt, requestId) {
+        let detectedType = 'GENERAL';
 
-        for (const [type, patterns] of Object.entries(TASK_PATTERNS)) {
-            if (patterns.some(p => p.test(text))) {
-                return type;
-            }
+        // Simple keyword heuristics
+        if (/(write|code|function|debug|fix|convert|script)/i.test(prompt)) detectedType = 'CODE';
+        else if (/(calculate|solve|math|equation|compute)/i.test(prompt)) detectedType = 'MATH';
+        else if (/(poem|story|haiku|creative|write a)/i.test(prompt)) detectedType = 'CREATIVE';
+        else if (/(analyze|sentiment|summarize|classify)/i.test(prompt)) detectedType = 'ANALYSIS';
+
+        // NEW: Complexity & Privacy Analysis
+        const privacy = PrivacyGuard.analyze(prompt);
+        const complexityScore = ComplexityScorer.score(prompt);
+        const complexityCat = ComplexityScorer.categorize(complexityScore);
+
+        if (requestId) {
+            inspector.trace(requestId, 'ROUTER_ANALYSIS', {
+                promptSummary: (prompt || '').slice(0, 50),
+                detectedType,
+                privacy: privacy.level,
+                pii: privacy.findings,
+                complexity: complexityCat,
+                score: complexityScore
+            });
         }
 
-        return 'GENERAL';
+        return { taskType: detectedType, privacy, complexity: complexityCat };
     }
 
     /**
-     * Select best provider for task
-     * @param {string} taskType 
+     * Select best provider based on task, availability, privacy, and system health.
+     * @param {Object} analysis Result from detectTaskType
      * @param {Array<Object>} availableProviders 
+     * @param {string} [requestId] 
      * @returns {Object|null} Selected Provider
      */
-    static selectProvider(taskType, availableProviders) {
-        // Define preferences (This could be dynamic config)
-        const PREFERENCES = {
-            CODE: ['codex', 'claude', 'gemini'], // Providers known for code
-            MATH: ['gpt-4', 'claude', 'gemini'],
-            CREATIVE: ['claude', 'gpt-4', 'gemini'],
-            ANALYSIS: ['claude', 'gemini', 'gpt-3.5'],
-            GENERAL: ['gpt-3.5', 'gemini', 'ollama']
-        };
+    static selectProvider(analysis, availableProviders, requestId) {
+        const { taskType, privacy, complexity } = analysis;
 
-        const preferredOrder = PREFERENCES[taskType] || PREFERENCES.GENERAL;
+        // 1. Privacy Filter
+        let candidates = availableProviders;
+        if (privacy.level !== 'PUBLIC') {
+            // Filter for secure/private providers only
+            candidates = candidates.filter(p => p.name.includes('ollama') || p.secure || (p.config && p.config.secure));
 
-        // Find first available provider in preferred order
-        for (const prefName of preferredOrder) {
-            const match = availableProviders.find(p =>
-                p.name.toLowerCase().includes(prefName) ||
-                (p.config && p.config.defaultModel && p.config.defaultModel.includes(prefName))
-            );
-            if (match) return match;
+            if (requestId && candidates.length < availableProviders.length) {
+                inspector.trace(requestId, 'PRIVACY_FILTER', {
+                    blocked: availableProviders.length - candidates.length,
+                    reason: `Content is ${privacy.level}`
+                });
+            }
         }
 
-        // Fallback to random/first available if no preference match
-        return availableProviders.length > 0 ? availableProviders[0] : null;
+        if (candidates.length === 0) {
+            // If strictly private and no private model, fail safe?
+            // For demo: if we blocked all, return null.
+            if (privacy.level !== 'PUBLIC') {
+                if (requestId) inspector.trace(requestId, 'ROUTER_BLOCK', { reason: 'No Secure Provider Available' });
+                return null;
+            }
+            candidates = availableProviders;
+        }
+
+        // 2. Resource & Complexity Optimization
+        const systemHealth = ResourceMonitor.getHealth();
+
+        // Preference Logic
+        // CODE -> Codex, Claude
+        // CREATIVE -> Claude, Gemini
+        // MATH -> Gemini, Claude
+        // ANALYSIS -> Claude
+
+        // Adjust preference based on Complexity/Health
+        // SIMPLE or DEGRADED -> Prefer faster/smaller models (Ollama, Gemini Flash)
+        const preferSpeed = complexity === 'SIMPLE' || systemHealth !== 'HEALTHY';
+
+        let preferredOrder = [];
+        if (preferSpeed) {
+            preferredOrder = ['ollama', 'gemini', 'claude', 'codex'];
+        } else {
+            // Default task-based preference
+            if (taskType === 'CODE') preferredOrder = ['codex', 'claude', 'gemini', 'ollama'];
+            else if (taskType === 'MATH') preferredOrder = ['gemini', 'claude', 'codex', 'ollama'];
+            else if (taskType === 'CREATIVE') preferredOrder = ['claude', 'gemini', 'ollama', 'codex'];
+            else preferredOrder = ['claude', 'gemini', 'codex', 'ollama'];
+        }
+
+        // Selection
+        let selected = null;
+        for (const name of preferredOrder) {
+            selected = candidates.find(p => p.name.toLowerCase().includes(name));
+            if (selected) break;
+        }
+
+        if (!selected) selected = candidates[0]; // Fallback
+
+        if (requestId) {
+            inspector.trace(requestId, 'ROUTER_SELECTION', {
+                taskType,
+                selected: selected?.name,
+                systemHealth,
+                privacyMode: privacy.level !== 'PUBLIC',
+                optimization: preferSpeed ? 'SPEED' : 'QUALITY'
+            });
+        }
+
+        return selected;
     }
 }
 

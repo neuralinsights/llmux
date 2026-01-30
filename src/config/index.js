@@ -12,5 +12,15 @@ module.exports = {
   PROVIDER_CONFIG,
   getProvidersByPriority,
   getAllModels,
+  ollama: {
+    enabled: true,
+    weight: 5,
+    defaultModel: 'qwen3:14b',
+    secure: true, // [NEW] Trusted for PII
+    models: {
+      general: 'qwen3:14b',
+      code: 'qwen3:14b-code',
+    },
+  },
   parseModelName,
 };

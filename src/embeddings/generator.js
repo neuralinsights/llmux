@@ -1,13 +1,32 @@
 /**
  * LLMux - Embeddings Generator
- * Generates embeddings using configured providers
+ * Generates semantic embeddings using Transformers.js (local, no API keys)
  */
 
-const { getProvider } = require('../providers');
+const { pipeline } = require('@xenova/transformers');
 
 class EmbeddingsGenerator {
-    constructor(providerName = 'ollama') {
-        this.providerName = process.env.EMBEDDING_PROVIDER || providerName;
+    constructor() {
+        this.model = null;
+        this.modelName = 'Xenova/all-MiniLM-L6-v2'; // 384-dim, 23MB
+        this.dimension = 384;
+        this.initPromise = null;
+    }
+
+    /**
+     * Lazy-load the embedding model
+     */
+    async init() {
+        if (this.model) return;
+        if (this.initPromise) return this.initPromise;
+
+        this.initPromise = (async () => {
+            console.log(`[Embeddings] Loading model: ${this.modelName}...`);
+            this.model = await pipeline('feature-extraction', this.modelName);
+            console.log(`[Embeddings] Model loaded (${this.dimension}d)`);
+        })();
+
+        return this.initPromise;
     }
 
     /**
@@ -16,36 +35,43 @@ class EmbeddingsGenerator {
      * @returns {Promise<number[]>}
      */
     async embedQuery(text) {
-        // In a real implementation, this delegates to the provider.
-        // For specific providers like OpenAI, they have dedicated endpoints.
-        // For Ollama, it has /api/embeddings.
-
-        // Check if provider supports embedding
-        try {
-            const provider = getProvider(this.providerName);
-            if (provider.embed) {
-                return await provider.embed(text);
-            }
-        } catch (e) {
-            // Provider not found or mock mode
+        if (!text || typeof text !== 'string') {
+            throw new Error('Text must be a non-empty string');
         }
 
-        // FALLBACK MOCK (Deterministic hash-based embedding for testing)
-        return this.mockEmbedding(text);
+        await this.init();
+
+        // Generate embedding
+        const output = await this.model(text, { pooling: 'mean', normalize: true });
+
+        // Convert tensor to array
+        const embedding = Array.from(output.data);
+
+        return embedding;
     }
 
-    mockEmbedding(text) {
-        // Simple deterministic pseudo-vector of size 10 needed for testing logic
-        // Real embeddings are 1536 dim (OpenAI) or 768 (HF).
-        const vec = new Array(10).fill(0);
-        let sum = 0;
-        for (let i = 0; i < text.length; i++) sum += text.charCodeAt(i);
+    /**
+     * Batch embed multiple texts (more efficient)
+     * @param {string[]} texts 
+     * @returns {Promise<number[][]>}
+     */
+    async embedBatch(texts) {
+        await this.init();
 
-        // Seed with sum
-        for (let i = 0; i < 10; i++) {
-            vec[i] = (sum * (i + 1)) % 100 / 100;
+        const embeddings = [];
+        for (const text of texts) {
+            const emb = await this.embedQuery(text);
+            embeddings.push(emb);
         }
-        return vec;
+
+        return embeddings;
+    }
+
+    /**
+     * Get embedding dimension
+     */
+    getDimension() {
+        return this.dimension;
     }
 }
 

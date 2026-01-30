@@ -10,9 +10,12 @@ const morgan = require('morgan');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const http = require('http'); // [NEW] Required for Socket.io
+const { Server } = require('socket.io'); // [NEW]
 
 const { env, PROVIDER_CONFIG } = require('./config');
 const { metrics } = require('./telemetry');
+const inspector = require('./telemetry/inspector'); // [NEW]
 const { createCache } = require('./cache');
 const {
   authMiddleware,
@@ -32,12 +35,36 @@ const ExperimentManager = require('./routing/experiment');
 const { logRoutingEvent } = require('./routing/collector');
 
 const app = express();
+const server = http.createServer(app); // [NEW] Wrap express app
 
 // ============ Logging Setup ============
 const LOG_DIR = path.join(process.cwd(), 'logs');
 if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 }
+
+const ResourceMonitor = require('./resilience/resource_monitor'); // [NEW]
+ResourceMonitor.start();
+
+// ============ Context Mesh (Phase 3) ============
+const contextInjector = require('./context/injector');
+const conversationHistory = require('./context/history');
+const entityExtractor = require('./context/extractor');
+
+// ============ Inspector / Socket.io Setup ============
+const io = new Server(server, {
+  cors: {
+    origin: "*", // Allow all for local dashboard
+    methods: ["GET", "POST"]
+  }
+});
+inspector.attach(io);
+
+// Broadcast System Stats every 5 seconds
+setInterval(() => {
+  const stats = ResourceMonitor.getStats();
+  inspector.trace('SYSTEM', 'SYSTEM_HEALTH', stats);
+}, 5000);
 
 // ============ CORS Configuration ============
 const corsOptions = {
@@ -50,9 +77,14 @@ const corsOptions = {
 };
 
 // ============ Middleware ============
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
+app.use(express.static('public')); // [NEW] Serve dashboard
+app.use(inspector.middleware()); // [NEW] Global trace middleware
 app.use(
   morgan('combined', {
     stream: fs.createWriteStream(path.join(LOG_DIR, 'access.log'), {
@@ -76,6 +108,9 @@ app.use(authMiddleware);
 
 // Prompt sanitization (OWASP LLM01 protection)
 app.use(sanitizer);
+
+// Context injection middleware (Phase 3 - before routing)
+app.use(contextInjector.middleware());
 
 // Request counting middleware
 app.use((req, res, next) => {
@@ -311,16 +346,10 @@ app.post('/api/smart', validateGenerateRequest, async (req, res) => {
 
     // Non-streaming smart routing with fallback
     // 1. Experiment / AI Selection
-    const routingDecision = ExperimentManager.route(prompt);
+    const routingDecision = ExperimentManager.route(prompt, requestId);
     console.log(`[ROUTING] Strategy: ${routingDecision.strategy}, Task: ${routingDecision.taskType}, Selected: ${routingDecision.provider?.name}`);
 
     // 2. Execute with preference (fallback to others if failed)
-    // We assume executeWithFallback can take a preferred provider or we call it directly.
-    // Since we don't know the exact signature of executeWithFallback regarding preference,
-    // we will rely on it if it supports it, OR we call the provider directly and use executeWithFallback as backup.
-    // For safety in this "blind" edit, let's try to pass it as 4th arg or metadata?
-    // Actually, looking at previous lines: `executeStreamWithFallback(..., selectedProvider)` is used for stream.
-    // So `executeWithFallback` likely matches.
 
     const result = await executeWithFallback(prompt, {
       ...options,
@@ -337,6 +366,24 @@ app.post('/api/smart', validateGenerateRequest, async (req, res) => {
       duration: (Date.now() - startTime),
       success: true
     });
+
+    // 4. Store conversation in memory (Phase 3)
+    const originalPrompt = req.contextInjection?.original || prompt;
+    conversationHistory.store({
+      requestId,
+      userPrompt: originalPrompt,
+      assistantResponse: result.response,
+      metadata: {
+        provider: result.provider,
+        model: result.model,
+        taskType: routingDecision.taskType,
+        strategy: routingDecision.strategy,
+        cached: result.cached || false
+      }
+    }).catch(err => console.error('[History] Storage failed:', err.message));
+
+    // 5. Extract entities (async, non-blocking)
+    entityExtractor.extractFromConversation(originalPrompt, result.response);
 
     res.json({
       model: result.model,
@@ -595,4 +642,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-module.exports = { app, initializeCache };
+module.exports = { app, server, initializeCache };

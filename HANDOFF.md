@@ -1,13 +1,112 @@
-# LLMux v3.1.0 Phase 2 交割文档
+# LLMux v5.0 (Phase 1-3 Complete) 交割文档
 
-> **交割时间**: 2026-01-30 15:30 NZDT
-> **完成状态**: Phase 2 全部完成
+> **交割时间**: 2026-01-30 17:45 NZDT  
+> **完成状态**: Phase 1 (Inspector) + Phase 2 (Privacy Engine) + Phase 3 (Context Mesh) 已完成  
+> **测试状态**: ✅ 所有核心功能已验证
 
 ---
 
 ## 执行摘要
 
-Phase 2 核心功能增强已全部完成，包括精确 Token 计数、Redis 缓存、API Key 级别速率限制、预算配额管理和动态路由。
+v5.0 演进的三个阶段全部完成，实现了从"黑盒路由"到"智能记忆网关"的跨越：
+
+1. **Live Flow Inspector (Phase 1)**: 实时可视化面板，WebSocket 推送所有请求生命周期事件。
+2. **Hybrid Privacy Engine (Phase 2)**: PII 自动检测、系统资源监控、复杂度感知路由。
+3. **Stateful Context Mesh (Phase 3)**: 透明记忆注入，基于 384 维语义嵌入的自动上下文检索。
+
+### 新增核心功能
+
+#### 1. Live Flow Inspector (Phase 1)
+- **实时可视化**: `http://localhost:8765/dashboard/index.html`
+- **Trace 链路**: 全局捕捉 `INBOUND` → `ROUTER` → `PLUGIN` → `OUTBOUND` 事件。
+- **技术栈**: Socket.io (Server + Client), Vanilla JS Dashboard (无构建流程，轻量级)。
+
+#### 2. Hybrid Privacy Engine (Phase 2)
+- **Privacy Guard**: 自动检测 Prompt 中的敏感信息 (Email, Phone, SSN, Credit Card)。
+    - **策略**: 发现 PII 时，强制路由至 `secure: true` 的 Provider (如本地 Ollama)。
+    - **UI**: Dashboard 上会标记红色的 `[PII]` 徽章。
+- **Resource Monitor**: 实时监控服务器 CPU、内存与事件循环延迟。
+    - **策略**: 当系统状态为 `CRITICAL` 时，路由逻辑会倾向于避开本地高负载模型。
+    - **UI**: Dashboard 顶部显示实时 `System: HEALTHY` 状态。
+- **Complexity Scorer**: 基于 Prompt 长度、代码块、LaTeX 公式等特征打分 (0-100)。
+    - **策略**: 简单任务 (SIMPLE) → 优先 Flash/Local 模型；复杂任务 (COMPLEX) → 优先 SOTA 模型 (Claude Opus)。
+
+#### 3. Stateful Context Mesh (Phase 3) 🆕
+- **Real Semantic Embeddings**: 使用 `@xenova/transformers` (384-dim, all-MiniLM-L6-v2) 替代 mock 嵌入。
+- **Conversation History**: 每次对话自动存储到向量数据库 (`MemoryVectorStore`)。
+- **Transparent Context Injection**: 
+    - 用户提问时，自动搜索历史对话 (余弦相似度 ≥ 0.7)。
+    - 将 top-3 相关片段注入到 Prompt 前缀。
+    - 示例：用户问 "What is my name?" → 系统检索到 "My name is Alice" → LLM 回答 "Your name is Alice"。
+- **Entity Extraction**: 正则提取人名、项目、日期、邮箱、金额等实体。
+- **Dashboard 事件**: 新增 `CONTEXT_INJECTION` 和 `MEMORY_STORED` 事件追踪。
+
+---
+
+## 变更文件清单
+
+### 新增 (Phase 1-3)
+- `src/telemetry/inspector.js`: Inspector SDK (Event Bus)
+- `src/resilience/resource_monitor.js`: 系统资源监控
+- `src/routing/privacy_guard.js`: PII 正则库与检测逻辑
+- `src/routing/complexity_scorer.js`: 复杂度启发式算法
+- `src/embeddings/generator.js`: **[Phase 3]** 真实语义嵌入 (Transformers.js)
+- `src/context/history.js`: **[Phase 3]** 对话历史存储
+- `src/context/injector.js`: **[Phase 3]** 透明上下文注入中间件
+- `src/context/extractor.js`: **[Phase 3]** 实体提取 (NER)
+- `public/dashboard/index.html`: 单页监控面板前端
+- `scripts/demo_traffic.js`: 流量生成脚本 (测试用)
+- `scripts/demo_privacy.js`: 隐私/复杂度测试脚本
+- `scripts/demo_memory.js`: **[Phase 3]** 记忆系统测试脚本
+
+### 修改
+- `src/app.js`: 
+    - 集成 Socket.io Server，挂载 Inspector 中间件。
+    - **[Phase 3]** 添加 `contextInjector.middleware()` (pre-request)。
+    - **[Phase 3]** 添加 `conversationHistory.store()` (post-response)。
+- `src/routing/ai_router.js`: 重构为 `SemanticRouter`，集成 Privacy/Complexity 分析。
+- `src/config/index.js`: 为 Ollama 添加 `secure: true` 标记。
+- `package.json`: 
+    - 添加 `socket.io` 相关依赖。
+    - **[Phase 3]** 添加 `@xenova/transformers`, `axios`。
+
+---
+
+## 验证方法 (快速开始)
+
+### 1. 启动服务
+```bash
+npm install  # 安装新依赖 (@xenova/transformers)
+npm start
+```
+
+### 2. 打开监控面板
+浏览器访问: `http://localhost:8765/dashboard/index.html`
+
+### 3. 运行测试脚本
+
+**Phase 1 & 2 测试**:
+```bash
+node scripts/demo_privacy.js
+```
+预期结果：
+- Dashboard 左侧列表滚动出现请求。
+- 包含 Email 的请求应标记 `[PII]` 并路由给 Ollama。
+- 顶部 System Status 显示绿色 `HEALTHY`。
+
+**Phase 3 测试** (记忆系统):
+```bash
+node scripts/demo_memory.js
+```
+预期结果：
+- ✅ 存储事实: "My name is Alice"
+- ✅ 回忆姓名: "What is my name?" → 回答包含 "Alice"
+- ✅ 回忆项目: "What project am I working on?" → 回答包含 "LLMux"
+- Dashboard 显示 `CONTEXT_INJECTION` 和 `MEMORY_STORED` 事件
+
+---
+
+# (Legacy v3.1.0/v4.0.0 Below)
 
 ### 完成的 Git 提交
 
