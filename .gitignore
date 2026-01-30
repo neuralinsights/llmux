@@ -47,6 +47,7 @@ temp/
 
 # Claude Code context (auto-generated)
 .claude/
+**/CLAUDE.md
 
 # Personal deployment scripts (not for distribution)
 deploy-to-nas.sh
