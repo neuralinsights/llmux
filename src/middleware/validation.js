@@ -1,9 +1,200 @@
 /**
  * LLMux - Request Validation Middleware
- * Input validation for API endpoints
+ * Type-safe input validation using Zod schemas
  */
 
+const { z } = require('zod');
 const { PROVIDER_CONFIG, parseModelName } = require('../config/providers');
+
+// ============ Zod Schemas ============
+
+/**
+ * Valid provider names (dynamic from config)
+ */
+const validProviders = Object.keys(PROVIDER_CONFIG);
+
+/**
+ * Generate request schema
+ */
+const generateRequestSchema = z.object({
+  prompt: z
+    .string({
+      required_error: 'prompt is required',
+      invalid_type_error: 'prompt must be a string',
+    })
+    .min(1, 'prompt cannot be empty')
+    .max(100000, 'prompt exceeds maximum length of 100000 characters'),
+
+  provider: z
+    .enum(validProviders, {
+      errorMap: () => ({
+        message: `Unknown provider. Valid providers: ${validProviders.join(', ')}`,
+      }),
+    })
+    .optional(),
+
+  model: z.string().optional(),
+
+  stream: z.boolean({ invalid_type_error: 'stream must be a boolean' }).optional(),
+
+  options: z
+    .object({
+      temperature: z
+        .number({ invalid_type_error: 'temperature must be a number' })
+        .min(0, 'temperature must be at least 0')
+        .max(2, 'temperature must be at most 2')
+        .optional(),
+      maxTokens: z
+        .number({ invalid_type_error: 'maxTokens must be a number' })
+        .int('maxTokens must be an integer')
+        .min(1, 'maxTokens must be at least 1')
+        .max(100000, 'maxTokens must be at most 100000')
+        .optional(),
+      timeout: z
+        .number({ invalid_type_error: 'timeout must be a number' })
+        .int('timeout must be an integer')
+        .min(1000, 'timeout must be at least 1000ms')
+        .max(600000, 'timeout must be at most 600000ms (10 minutes)')
+        .optional(),
+      topP: z
+        .number({ invalid_type_error: 'topP must be a number' })
+        .min(0, 'topP must be at least 0')
+        .max(1, 'topP must be at most 1')
+        .optional(),
+      topK: z
+        .number({ invalid_type_error: 'topK must be a number' })
+        .int('topK must be an integer')
+        .min(1, 'topK must be at least 1')
+        .optional(),
+      stopSequences: z.array(z.string()).max(10, 'stopSequences can have at most 10 items').optional(),
+    })
+    .strict()
+    .optional(),
+}).strict();
+
+/**
+ * Chat message schema (OpenAI compatible)
+ */
+const chatMessageSchema = z.object({
+  role: z.enum(['system', 'user', 'assistant'], {
+    errorMap: () => ({ message: 'role must be one of: system, user, assistant' }),
+  }),
+  content: z.string({
+    required_error: 'content is required',
+    invalid_type_error: 'content must be a string',
+  }),
+  name: z.string().max(64).optional(),
+});
+
+/**
+ * Chat completion request schema (OpenAI compatible)
+ */
+const chatCompletionSchema = z.object({
+  model: z.string({
+    required_error: 'model is required',
+    invalid_type_error: 'model must be a string',
+  }),
+
+  messages: z
+    .array(chatMessageSchema, {
+      required_error: 'messages is required',
+      invalid_type_error: 'messages must be an array',
+    })
+    .min(1, 'messages must contain at least one message')
+    .max(1000, 'messages can have at most 1000 items'),
+
+  stream: z.boolean({ invalid_type_error: 'stream must be a boolean' }).optional(),
+
+  temperature: z
+    .number({ invalid_type_error: 'temperature must be a number' })
+    .min(0)
+    .max(2)
+    .optional(),
+
+  max_tokens: z
+    .number({ invalid_type_error: 'max_tokens must be a number' })
+    .int()
+    .min(1)
+    .max(100000)
+    .optional(),
+
+  top_p: z.number().min(0).max(1).optional(),
+
+  frequency_penalty: z.number().min(-2).max(2).optional(),
+
+  presence_penalty: z.number().min(-2).max(2).optional(),
+
+  stop: z.union([z.string(), z.array(z.string()).max(4)]).optional(),
+
+  user: z.string().max(256).optional(),
+});
+
+// ============ Error Formatting ============
+
+/**
+ * Format Zod error to LLMux error response
+ * @param {z.ZodError} error - Zod validation error
+ * @param {string} format - Response format ('llmux' or 'openai')
+ * @returns {Object} Formatted error response
+ */
+function formatZodError(error, format = 'llmux') {
+  const firstIssue = error.issues[0];
+  const path = firstIssue.path.join('.');
+  const message = path ? `${path}: ${firstIssue.message}` : firstIssue.message;
+
+  if (format === 'openai') {
+    return {
+      error: {
+        message: message,
+        type: 'invalid_request_error',
+        code: firstIssue.code,
+        param: path || null,
+      },
+    };
+  }
+
+  // LLMux format
+  return {
+    error: message,
+    code: mapZodCodeToLLMuxCode(firstIssue),
+    details: error.issues.map((issue) => ({
+      path: issue.path.join('.'),
+      message: issue.message,
+      code: issue.code,
+    })),
+  };
+}
+
+/**
+ * Map Zod error code to LLMux error code
+ * @param {Object} issue - Zod issue
+ * @returns {string} LLMux error code
+ */
+function mapZodCodeToLLMuxCode(issue) {
+  const path = issue.path[0] || 'unknown';
+
+  // Zod 4.x: check for missing required field via message content
+  // (received property is not directly exposed in issue object)
+  if (issue.code === 'invalid_type' && issue.message?.includes('received undefined')) {
+    return `MISSING_${path.toUpperCase()}`;
+  }
+
+  if (issue.code === 'too_small' && path === 'prompt') {
+    return 'EMPTY_PROMPT';
+  }
+
+  if (issue.code === 'too_big') {
+    return `${path.toUpperCase()}_TOO_LONG`;
+  }
+
+  if (issue.code === 'invalid_enum_value') {
+    return `INVALID_${path.toUpperCase()}`;
+  }
+
+  return `INVALID_${path.toUpperCase()}`;
+}
+
+// ============ Middleware Functions ============
 
 /**
  * Validate generate request body
@@ -12,86 +203,14 @@ const { PROVIDER_CONFIG, parseModelName } = require('../config/providers');
  * @param {Function} next - Next middleware
  */
 function validateGenerateRequest(req, res, next) {
-  const { prompt, provider, model, stream, options } = req.body;
+  const result = generateRequestSchema.safeParse(req.body);
 
-  // Prompt is required
-  if (!prompt) {
-    return res.status(400).json({
-      error: 'prompt is required',
-      code: 'MISSING_PROMPT',
-    });
+  if (!result.success) {
+    return res.status(400).json(formatZodError(result.error, 'llmux'));
   }
 
-  // Validate prompt type
-  if (typeof prompt !== 'string') {
-    return res.status(400).json({
-      error: 'prompt must be a string',
-      code: 'INVALID_PROMPT_TYPE',
-    });
-  }
-
-  // Validate prompt length (max 100KB)
-  if (prompt.length > 100000) {
-    return res.status(400).json({
-      error: 'prompt exceeds maximum length of 100000 characters',
-      code: 'PROMPT_TOO_LONG',
-    });
-  }
-
-  // Validate provider if specified
-  if (provider && !PROVIDER_CONFIG[provider]) {
-    return res.status(400).json({
-      error: `Unknown provider: ${provider}. Valid providers: ${Object.keys(PROVIDER_CONFIG).join(', ')}`,
-      code: 'INVALID_PROVIDER',
-    });
-  }
-
-  // Validate stream parameter
-  if (stream !== undefined && typeof stream !== 'boolean') {
-    return res.status(400).json({
-      error: 'stream must be a boolean',
-      code: 'INVALID_STREAM_TYPE',
-    });
-  }
-
-  // Validate options if provided
-  if (options) {
-    if (typeof options !== 'object' || Array.isArray(options)) {
-      return res.status(400).json({
-        error: 'options must be an object',
-        code: 'INVALID_OPTIONS_TYPE',
-      });
-    }
-
-    // Validate specific options
-    if (options.temperature !== undefined) {
-      if (typeof options.temperature !== 'number' || options.temperature < 0 || options.temperature > 2) {
-        return res.status(400).json({
-          error: 'temperature must be a number between 0 and 2',
-          code: 'INVALID_TEMPERATURE',
-        });
-      }
-    }
-
-    if (options.maxTokens !== undefined) {
-      if (typeof options.maxTokens !== 'number' || options.maxTokens < 1 || options.maxTokens > 100000) {
-        return res.status(400).json({
-          error: 'maxTokens must be a number between 1 and 100000',
-          code: 'INVALID_MAX_TOKENS',
-        });
-      }
-    }
-
-    if (options.timeout !== undefined) {
-      if (typeof options.timeout !== 'number' || options.timeout < 1000 || options.timeout > 600000) {
-        return res.status(400).json({
-          error: 'timeout must be a number between 1000 and 600000 (ms)',
-          code: 'INVALID_TIMEOUT',
-        });
-      }
-    }
-  }
-
+  // Store validated data
+  req.validatedBody = result.data;
   next();
 }
 
@@ -102,73 +221,22 @@ function validateGenerateRequest(req, res, next) {
  * @param {Function} next - Next middleware
  */
 function validateChatCompletionRequest(req, res, next) {
-  const { model, messages, stream } = req.body;
+  const result = chatCompletionSchema.safeParse(req.body);
 
-  // Model is required for OpenAI compatibility
-  if (!model) {
-    return res.status(400).json({
-      error: {
-        message: 'model is required',
-        type: 'invalid_request_error',
-        code: 'model_required',
-      },
-    });
+  if (!result.success) {
+    return res.status(400).json(formatZodError(result.error, 'openai'));
   }
 
-  // Messages are required
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({
-      error: {
-        message: 'messages must be a non-empty array',
-        type: 'invalid_request_error',
-        code: 'messages_required',
-      },
-    });
-  }
-
-  // Validate each message
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-
-    if (!msg.role || !['system', 'user', 'assistant'].includes(msg.role)) {
-      return res.status(400).json({
-        error: {
-          message: `messages[${i}].role must be one of: system, user, assistant`,
-          type: 'invalid_request_error',
-          code: 'invalid_role',
-        },
-      });
-    }
-
-    if (typeof msg.content !== 'string') {
-      return res.status(400).json({
-        error: {
-          message: `messages[${i}].content must be a string`,
-          type: 'invalid_request_error',
-          code: 'invalid_content',
-        },
-      });
-    }
-  }
-
-  // Validate stream parameter
-  if (stream !== undefined && typeof stream !== 'boolean') {
-    return res.status(400).json({
-      error: {
-        message: 'stream must be a boolean',
-        type: 'invalid_request_error',
-        code: 'invalid_stream',
-      },
-    });
-  }
+  // Store validated data
+  req.validatedBody = result.data;
 
   // Parse and validate model name
   try {
-    const parsed = parseModelName(model);
+    const parsed = parseModelName(result.data.model);
     req.parsedModel = parsed;
   } catch (e) {
     // Model parsing failed, but we'll handle unknown models gracefully
-    req.parsedModel = { provider: null, model: model };
+    req.parsedModel = { provider: null, model: result.data.model };
   }
 
   next();
@@ -194,8 +262,19 @@ function bodySizeLimiter(maxSize = 1024 * 1024) {
   };
 }
 
+// ============ Exports ============
+
 module.exports = {
+  // Middleware
   validateGenerateRequest,
   validateChatCompletionRequest,
   bodySizeLimiter,
+
+  // Schemas (for external use/testing)
+  generateRequestSchema,
+  chatCompletionSchema,
+  chatMessageSchema,
+
+  // Utilities
+  formatZodError,
 };

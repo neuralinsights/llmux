@@ -19,7 +19,27 @@ const {
   validateGenerateRequest,
   validateChatCompletionRequest,
   bodySizeLimiter,
+  generateRequestSchema,
+  chatCompletionSchema,
+  chatMessageSchema,
+  formatZodError,
 } = require('./validation');
+
+const {
+  createSanitizer,
+  sanitizer,
+  analyzePrompt,
+  SUSPICIOUS_PATTERNS,
+  BLOCKED_PATTERNS,
+} = require('./sanitizer');
+
+const {
+  createApiLimiter,
+  createAuthLimiter,
+  createBurstLimiter,
+  createTieredLimiter,
+  apiLimiter,
+} = require('./rateLimit');
 
 module.exports = {
   // Authentication
@@ -37,4 +57,22 @@ module.exports = {
   validateGenerateRequest,
   validateChatCompletionRequest,
   bodySizeLimiter,
+  generateRequestSchema,
+  chatCompletionSchema,
+  chatMessageSchema,
+  formatZodError,
+
+  // Sanitization (OWASP LLM01)
+  createSanitizer,
+  sanitizer,
+  analyzePrompt,
+  SUSPICIOUS_PATTERNS,
+  BLOCKED_PATTERNS,
+
+  // Rate Limiting
+  createApiLimiter,
+  createAuthLimiter,
+  createBurstLimiter,
+  createTieredLimiter,
+  apiLimiter,
 };

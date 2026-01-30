@@ -14,8 +14,18 @@ const { v4: uuidv4 } = require('uuid');
 const { env, PROVIDER_CONFIG } = require('./config');
 const { metrics } = require('./telemetry');
 const { createCache } = require('./cache');
-const { authMiddleware, adminAuthMiddleware, generateApiKey, listApiKeys, deleteApiKey } = require('./middleware/auth');
-const { validateGenerateRequest, validateChatCompletionRequest } = require('./middleware/validation');
+const {
+  authMiddleware,
+  adminAuthMiddleware,
+  generateApiKey,
+  listApiKeys,
+  deleteApiKey,
+  validateGenerateRequest,
+  validateChatCompletionRequest,
+  sanitizer,
+  apiLimiter,
+  createAuthLimiter,
+} = require('./middleware');
 const { getProvider, getAvailableProviders, getAllProviderStats } = require('./providers');
 const { executeWithFallback, executeStreamWithFallback, selectProviderWeighted, estimateTokens } = require('./routing');
 
@@ -27,9 +37,19 @@ if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
+// ============ CORS Configuration ============
+const corsOptions = {
+  origin: env.CORS_WHITELIST || env.CORS_ORIGIN,
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Request-ID'],
+  exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+  credentials: true,
+  maxAge: 86400, // 24 hours
+};
+
 // ============ Middleware ============
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(
   morgan('combined', {
@@ -39,8 +59,14 @@ app.use(
   })
 );
 
+// Rate limiting (applies to all routes except health/metrics)
+app.use(apiLimiter);
+
 // Authentication middleware
 app.use(authMiddleware);
+
+// Prompt sanitization (OWASP LLM01 protection)
+app.use(sanitizer);
 
 // Request counting middleware
 app.use((req, res, next) => {
