@@ -2,10 +2,12 @@
   "name": "llmux",
   "version": "3.0.0",
   "description": "LLMux - LLM Multiplexer. Unified multi-provider AI gateway with streaming, smart caching, weighted load balancing, and Prometheus metrics",
-  "main": "server.js",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "start": "node src/index.js",
+    "start:legacy": "node server.js",
+    "dev": "node --watch src/index.js",
+    "dev:legacy": "node --watch server.js",
     "test": "node --test test/*.js",
     "health": "curl -s http://localhost:8765/health | jq",
     "metrics": "curl -s http://localhost:8765/metrics"
