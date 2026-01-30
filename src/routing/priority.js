@@ -4,7 +4,7 @@
  */
 
 const { getProvider, getProvidersByPriorityOrder } = require('../providers');
-const { isQuotaError } = require('../utils/retry');
+const { isQuotaError, estimateTokens: tokenEstimate } = require('../utils');
 const { metrics } = require('../telemetry/metrics');
 
 /**
@@ -139,16 +139,14 @@ function executeStreamWithFallback(prompt, options, onData, onEnd, onError, pref
 }
 
 /**
- * Estimate token count (crude estimate: ~4 chars per token)
+ * Estimate token count using tiktoken (accurate) with fallback to crude estimate
  * @param {string} prompt - Input prompt
  * @param {string} response - Output response
- * @returns {{prompt: number, completion: number}}
+ * @param {string} [model='gpt-4'] - Model name for encoding selection
+ * @returns {{prompt: number, completion: number, total: number}}
  */
-function estimateTokens(prompt, response) {
-  return {
-    prompt: Math.ceil((prompt || '').length / 4),
-    completion: Math.ceil((response || '').length / 4),
-  };
+function estimateTokens(prompt, response, model = 'gpt-4') {
+  return tokenEstimate(prompt, response, model);
 }
 
 module.exports = {

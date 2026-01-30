@@ -2,7 +2,7 @@
  * Cache Module Unit Tests
  */
 
-const { MemoryCache, CacheAdapter, createCache } = require('../src/cache');
+const { MemoryCache, RedisCache, CacheAdapter, createCache } = require('../src/cache');
 
 describe('Cache: MemoryCache', () => {
   let cache;
@@ -170,13 +170,53 @@ describe('Cache: createCache', () => {
     expect(cache).toBeInstanceOf(MemoryCache);
   });
 
-  it('should fall back to memory for unknown backend', async () => {
-    const cache = await createCache({ backend: 'redis' });
+  it('should fall back to memory when redis unavailable', async () => {
+    // Redis not running, should fall back to memory
+    const cache = await createCache({ backend: 'redis', url: 'redis://localhost:59999' });
     expect(cache).toBeInstanceOf(MemoryCache);
   });
 
   it('should throw for invalid backend', async () => {
     await expect(createCache({ backend: 'invalid_xyz' }))
       .rejects.toThrow('Unknown cache backend');
+  });
+});
+
+describe('Cache: RedisCache', () => {
+  it('should be instantiable', () => {
+    const cache = new RedisCache({ url: 'redis://localhost:6379' });
+    expect(cache).toBeInstanceOf(RedisCache);
+    expect(cache).toBeInstanceOf(CacheAdapter);
+  });
+
+  it('should have correct default options', () => {
+    const cache = new RedisCache();
+    expect(cache.ttl).toBe(3600000);
+    expect(cache.keyPrefix).toBe('llmux:cache:');
+  });
+
+  it('should accept custom options', () => {
+    const cache = new RedisCache({
+      url: 'redis://custom:6379',
+      ttl: 5000,
+      maxSize: 500,
+      keyPrefix: 'custom:',
+    });
+    expect(cache.ttl).toBe(5000);
+    expect(cache.maxSize).toBe(500);
+    expect(cache.keyPrefix).toBe('custom:');
+  });
+
+  it('should build keys with prefix', () => {
+    const cache = new RedisCache({ keyPrefix: 'test:' });
+    expect(cache._buildKey('mykey')).toBe('test:mykey');
+  });
+
+  it('should generate consistent cache keys', () => {
+    const cache = new RedisCache();
+    const key1 = cache.generateKey('prompt', 'model', 'provider');
+    const key2 = cache.generateKey('prompt', 'model', 'provider');
+    expect(key1).toBe(key2);
+    expect(key1.length).toBe(64); // SHA256 hex
   });
 });

@@ -1,8 +1,10 @@
 # LLMux v3.0.0 - Docker Compose Configuration
 #
 # Usage:
-#   docker-compose up -d              # Default start
-#   docker-compose --profile ollama up -d  # Start with Ollama
+#   docker-compose up -d                    # Default start (memory cache)
+#   docker-compose --profile redis up -d    # Start with Redis cache
+#   docker-compose --profile ollama up -d   # Start with Ollama
+#   docker-compose --profile redis --profile ollama up -d  # Both
 #
 # Environment variables can be overridden via .env file or command line
 
@@ -27,12 +29,18 @@ services:
       - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-120000}
       - HOME=/root
       # Cache configuration
+      - CACHE_BACKEND=${CACHE_BACKEND:-memory}
       - CACHE_TTL=${CACHE_TTL:-3600000}
       - CACHE_MAX_SIZE=${CACHE_MAX_SIZE:-1000}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       # API Key authentication (optional)
       - API_KEY_REQUIRED=${API_KEY_REQUIRED:-false}
       - API_KEY=${API_KEY:-}
       - ADMIN_KEY=${ADMIN_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+        required: false
     volumes:
       # Application code (hot reload for development)
       - ./server.js:/app/server.js:ro
@@ -50,6 +58,25 @@ services:
       retries: 3
     networks:
       - llmux-network
+
+  # Optional: Redis cache (start with --profile redis)
+  redis:
+    image: redis:7-alpine
+    container_name: llmux-redis
+    profiles:
+      - redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - llmux-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   # Optional: Ollama service (start with --profile ollama)
   ollama:
@@ -78,3 +105,4 @@ networks:
 
 volumes:
   ollama_data:
+  redis_data:
