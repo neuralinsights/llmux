@@ -1,6 +1,6 @@
 # LLMux Architecture
 
-> **Version**: 3.0.0
+> **Version**: 5.0.0
 > **Author**: LLMux Team
 > **Last Updated**: 2026-01-30
 
@@ -55,21 +55,80 @@ src/
 ├── cache/
 │   ├── index.js          # Cache factory
 │   ├── adapter.js        # CacheAdapter interface
-│   └── memory.js         # In-memory LRU cache
+│   ├── memory.js         # In-memory LRU cache
+│   └── redis.js          # Redis distributed cache (v5.0)
 ├── routing/
 │   ├── index.js          # Routing aggregator
 │   ├── weighted.js       # Weighted random selection
-│   └── priority.js       # Priority-based fallback
+│   ├── priority.js       # Priority-based fallback
+│   ├── dynamic.js        # Dynamic task-aware routing
+│   ├── ai_router.js      # Semantic AI routing (v5.0)
+│   ├── shadow.js         # Shadow routing for A/B testing (v5.0)
+│   ├── experiment.js     # Experiment management
+│   ├── weight_optimizer.js # Dynamic weight adjustment (v5.0)
+│   ├── complexity_scorer.js # Task complexity scoring (v5.0)
+│   ├── privacy_guard.js  # PII detection & routing (v5.0)
+│   └── collector.js      # Routing event collector
 ├── middleware/
 │   ├── index.js          # Middleware exports
 │   ├── auth.js           # API key authentication
 │   ├── validation.js     # Zod schema validation
 │   ├── sanitizer.js      # Prompt injection protection
 │   └── rateLimit.js      # Rate limiting
+├── context/              # Context management (v5.0)
+│   ├── history.js        # Conversation history storage
+│   ├── injector.js       # Transparent context injection
+│   └── extractor.js      # Entity extraction (NER)
+├── embeddings/           # Vector embeddings (v5.0)
+│   └── generator.js      # 384-dim embedding generator
+├── evaluation/           # Quality evaluation (v5.0)
+│   ├── judge.js          # LLM-as-judge evaluator
+│   └── metrics_collector.js # Evaluation metrics
+├── resilience/           # Fault tolerance (v5.0)
+│   ├── index.js          # Resilience aggregator
+│   ├── circuitBreaker.js # Circuit breaker pattern
+│   └── resource_monitor.js # System health monitoring
+├── plugins/              # Plugin system (v5.0)
+│   ├── loader.js         # Plugin loader
+│   ├── registry.js       # Plugin registry & hooks
+│   └── context.js        # Plugin context
+├── integrations/         # Third-party integrations (v5.0)
+│   ├── sentry.js         # Error tracking
+│   ├── langfuse.js       # LLM observability
+│   ├── helicone.js       # Request logging
+│   └── webhooks.js       # Webhook management
 ├── telemetry/
-│   └── metrics.js        # Prometheus metrics collector
+│   ├── index.js          # Telemetry aggregator
+│   ├── metrics.js        # Prometheus metrics collector
+│   ├── tracing.js        # OpenTelemetry tracing (v5.0)
+│   ├── otelSetup.js      # OTLP configuration (v5.0)
+│   └── inspector.js      # Live Flow Inspector (v5.0)
+├── routes/               # API routes (v5.0)
+│   ├── tenants.js        # Multi-tenancy management
+│   ├── webhooks.js       # Webhook endpoints
+│   ├── vector.js         # Vector storage API
+│   └── evaluation.js     # Evaluation API
+├── db/                   # Database layer (v5.0)
+│   ├── index.js          # Database factory
+│   ├── adapter.js        # Database adapter interface
+│   └── sqlite.js         # SQLite implementation
+├── models/               # Data models (v5.0)
+│   ├── apiKey.js         # API key model
+│   └── tenant.js         # Tenant model
+├── vector/               # Vector database (v5.0)
+│   └── index.js          # In-memory vector store
+├── mcp/                  # Model Context Protocol (v5.0)
+│   └── server.js         # MCP server implementation
+├── quota/                # Quota management (v5.0)
+│   ├── index.js          # Quota aggregator
+│   └── manager.js        # Quota manager
+├── rateLimit/            # Rate limiting (v5.0)
+│   ├── index.js          # Rate limit aggregator
+│   └── slidingWindow.js  # Sliding window counter
 └── utils/
+    ├── index.js          # Utils aggregator
     ├── retry.js          # Exponential backoff retry
+    ├── tokenCounter.js   # Token counting (tiktoken)
     └── cli.js            # CLI execution utilities
 ```
 
@@ -188,7 +247,7 @@ Client Request
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | 3456 | HTTP server port |
+| `PORT` | 8765 | HTTP server port |
 | `DEFAULT_PROVIDER` | claude | Default LLM provider |
 | `API_KEY_REQUIRED` | false | Require API key authentication |
 | `CACHE_TTL` | 3600000 | Cache TTL in milliseconds |
@@ -254,16 +313,16 @@ const PROVIDER_CONFIG = {
 
 ```bash
 # Basic health
-curl http://localhost:3456/health
+curl http://localhost:8765/health
 
 # Deep health (checks all providers)
-curl http://localhost:3456/health?deep=true
+curl http://localhost:8765/health?deep=true
 ```
 
 ### Prometheus Metrics
 
 ```bash
-curl http://localhost:3456/metrics
+curl http://localhost:8765/metrics
 ```
 
 ## Future Enhancements (Roadmap)

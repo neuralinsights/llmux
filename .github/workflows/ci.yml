@@ -84,9 +84,9 @@ jobs:
         run: |
           timeout 10 node src/index.js &
           sleep 5
-          curl -f http://localhost:3456/health || exit 1
+          curl -f http://localhost:8765/health || exit 1
         env:
-          PORT: 3456
+          PORT: 8765
           API_KEY_REQUIRED: 'false'
 
   docker:

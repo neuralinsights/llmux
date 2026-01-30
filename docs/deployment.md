@@ -1,6 +1,6 @@
 # LLMux Deployment Guide
 
-> **Version**: 3.0.0
+> **Version**: 5.0.0
 > **Last Updated**: 2026-01-30
 
 This guide covers deploying LLMux in various environments.
@@ -53,7 +53,7 @@ Create a `.env` file with the following variables:
 
 ```bash
 # Server Configuration
-PORT=3456
+PORT=8765
 NODE_ENV=production
 
 # Provider API Keys
@@ -99,9 +99,9 @@ COPY src ./src
 COPY config ./config
 
 ENV NODE_ENV=production
-ENV PORT=3456
+ENV PORT=8765
 
-EXPOSE 3456
+EXPOSE 8765
 
 USER node
 
@@ -112,15 +112,15 @@ CMD ["node", "src/index.js"]
 
 ```bash
 # Build image
-docker build -t llmux:3.0.0 .
+docker build -t llmux:5.0.0 .
 
 # Run container
 docker run -d \
   --name llmux \
-  -p 3456:3456 \
+  -p 8765:8765 \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e GEMINI_API_KEY=AIza... \
-  llmux:3.0.0
+  llmux:5.0.0
 ```
 
 ### Docker Compose
@@ -132,7 +132,7 @@ services:
   llmux:
     build: .
     ports:
-      - "3456:3456"
+      - "8765:8765"
     environment:
       - NODE_ENV=production
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
@@ -142,7 +142,7 @@ services:
       - CACHE_TTL=3600000
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3456/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -182,9 +182,9 @@ spec:
     spec:
       containers:
       - name: llmux
-        image: llmux:3.0.0
+        image: llmux:5.0.0
         ports:
-        - containerPort: 3456
+        - containerPort: 8765
         env:
         - name: ANTHROPIC_API_KEY
           valueFrom:
@@ -206,13 +206,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 3456
+            port: 8765
           initialDelaySeconds: 10
           periodSeconds: 30
         readinessProbe:
           httpGet:
             path: /health
-            port: 3456
+            port: 8765
           initialDelaySeconds: 5
           periodSeconds: 10
 ---
@@ -225,7 +225,7 @@ spec:
     app: llmux
   ports:
   - port: 80
-    targetPort: 3456
+    targetPort: 8765
   type: ClusterIP
 ---
 apiVersion: networking.k8s.io/v1
@@ -269,7 +269,7 @@ LLMux supports deployment on Synology NAS via Docker or direct Node.js installat
 
 1. Open Container Manager in DSM
 2. Go to Registry and search for `llmux` (or build locally)
-3. Create container with port mapping 3456:3456
+3. Create container with port mapping 8765:8765
 4. Set environment variables in container settings
 
 ### Using Task Scheduler
@@ -287,10 +287,10 @@ ssh nas "cd /volume1/docker/llmux && npm install && pm2 restart llmux"
 
 ```bash
 # Basic health
-curl http://localhost:3456/health
+curl http://localhost:8765/health
 
 # Deep health (checks providers)
-curl http://localhost:3456/health?deep=true
+curl http://localhost:8765/health?deep=true
 ```
 
 ### Prometheus Integration
@@ -301,7 +301,7 @@ Add to `prometheus.yml`:
 scrape_configs:
   - job_name: 'llmux'
     static_configs:
-      - targets: ['llmux:3456']
+      - targets: ['llmux:8765']
     metrics_path: /metrics
 ```
 
@@ -350,9 +350,9 @@ Use any standard load balancer (nginx, HAProxy, cloud LB):
 ```nginx
 upstream llmux {
     least_conn;
-    server llmux-1:3456;
-    server llmux-2:3456;
-    server llmux-3:3456;
+    server llmux-1:8765;
+    server llmux-2:8765;
+    server llmux-3:8765;
 }
 
 server {
@@ -377,16 +377,16 @@ server {
 **Provider unavailable**
 ```bash
 # Check provider health
-curl http://localhost:3456/health?deep=true
+curl http://localhost:8765/health?deep=true
 
 # Reset provider cooldown
-curl -X POST http://localhost:3456/api/quota/reset -d '{"provider":"claude"}'
+curl -X POST http://localhost:8765/api/quota/reset -d '{"provider":"claude"}'
 ```
 
 **High memory usage**
 ```bash
 # Clear cache
-curl -X POST http://localhost:3456/api/cache/clear
+curl -X POST http://localhost:8765/api/cache/clear
 
 # Reduce cache size
 CACHE_MAX_SIZE=500
@@ -395,7 +395,7 @@ CACHE_MAX_SIZE=500
 **Rate limiting issues**
 ```bash
 # Check current limits in response headers
-curl -I http://localhost:3456/v1/models
+curl -I http://localhost:8765/v1/models
 # Look for: RateLimit: limit=100, remaining=99, reset=60
 ```
 

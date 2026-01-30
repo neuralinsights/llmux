@@ -16,7 +16,7 @@ info:
     ## Authentication
     API key authentication is optional and controlled by `API_KEY_REQUIRED` env var.
     When enabled, include the API key in the `X-API-Key` header.
-  version: 3.0.0
+  version: 5.0.0
   contact:
     name: LLMux Team
     url: https://github.com/neuralinsights/llmux
@@ -25,7 +25,7 @@ info:
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: http://localhost:3456
+  - url: http://localhost:8765
     description: Local development server
   - url: https://llmux.example.com
     description: Production server

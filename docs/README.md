@@ -1,6 +1,6 @@
 # LLMux Documentation
 
-> **Version**: 3.0.0
+> **Version**: 5.0.0
 > **Last Updated**: 2026-01-30
 
 Welcome to the LLMux documentation. LLMux is a unified AI CLI HTTP gateway that provides intelligent routing across multiple LLM providers.
@@ -34,10 +34,10 @@ Welcome to the LLMux documentation. LLMux is a unified AI CLI HTTP gateway that 
 
 | Provider | Default Model | Weight |
 |----------|---------------|--------|
-| Claude | claude-sonnet-4-20250514 | 30% |
-| Gemini | gemini-2.5-flash | 25% |
-| Codex | codex-1 | 25% |
-| Ollama | qwen3:32b | 20% |
+| Claude | claude-opus-4-5 | 50% |
+| Gemini | gemini-3-flash-preview | 30% |
+| Codex | gpt-5.2-codex | 15% |
+| Ollama | qwen3:14b | 5% |
 
 ## License
 

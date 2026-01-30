@@ -1,4 +1,4 @@
-# LLMux v3.0.0 - Docker Compose Configuration
+# LLMux v5.0.0 - Docker Compose Configuration
 #
 # Usage:
 #   docker-compose up -d                    # Default start (memory cache)
@@ -15,7 +15,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: llmux:3.0.0
+    image: llmux:5.0.0
     container_name: ${CONTAINER_NAME:-llmux}
     restart: unless-stopped
     ports:

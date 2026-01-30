@@ -85,7 +85,7 @@ colima start
 #### Manual docker run
 
 ```bash
-docker build -t llmux:3.0.0 .
+docker build -t llmux:5.0.0 .
 
 docker run -d \
   --name llmux \
@@ -94,7 +94,7 @@ docker run -d \
   -v ~/.codex:/root/.codex:ro \
   -v ~/.gemini:/root/.gemini:ro \
   -e OLLAMA_HOST=http://host.docker.internal:11434 \
-  llmux:3.0.0
+  llmux:5.0.0
 ```
 
 ### Host Access Addresses
