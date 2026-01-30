@@ -1,6 +1,6 @@
 {
   "name": "llmux",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "description": "LLMux - LLM Multiplexer. Unified multi-provider AI gateway with streaming, smart caching, weighted load balancing, and Prometheus metrics",
   "main": "src/index.js",
   "scripts": {
