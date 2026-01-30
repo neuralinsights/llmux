@@ -46,8 +46,15 @@ temp/
 # package-lock.json
 
 # Claude Code context (auto-generated)
+# Agent context
 .claude/
+.gemini/
 **/CLAUDE.md
+
+# Scratchpads
+declarative-*.md
+*.log
+
 
 # Personal deployment scripts (not for distribution)
 deploy-to-nas.sh

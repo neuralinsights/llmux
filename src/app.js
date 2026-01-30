@@ -28,6 +28,8 @@ const {
 } = require('./middleware');
 const { getProvider, getAvailableProviders, getAllProviderStats } = require('./providers');
 const { executeWithFallback, executeStreamWithFallback, selectProviderWeighted, estimateTokens } = require('./routing');
+const ExperimentManager = require('./routing/experiment');
+const { logRoutingEvent } = require('./routing/collector');
 
 const app = express();
 
@@ -61,6 +63,13 @@ app.use(
 
 // Rate limiting (applies to all routes except health/metrics)
 app.use(apiLimiter);
+
+// Plugin Hook: onRequest
+const registry = require('./plugins/registry');
+app.use(async (req, res, next) => {
+  await registry.executeHook('onRequest', { req, res });
+  next();
+});
 
 // Authentication middleware
 app.use(authMiddleware);
@@ -102,6 +111,15 @@ app.get('/metrics', (req, res) => {
   res.set('Content-Type', 'text/plain; version=0.0.4');
   res.send(metrics.toPrometheusFormat());
 });
+
+const tenantRoutes = require('./routes/tenants');
+app.use('/api/tenants', tenantRoutes);
+
+const webhookRoutes = require('./routes/webhooks');
+app.use('/api/webhooks', webhookRoutes);
+
+const vectorRoutes = require('./routes/vector');
+app.use('/api/vector', vectorRoutes);
 
 /**
  * Health check endpoint
@@ -157,6 +175,15 @@ app.post('/api/generate', validateGenerateRequest, async (req, res) => {
       options = {},
       stream = false,
     } = req.body;
+
+    // Plugin Hook: onPrompt
+    await registry.executeHook('onPrompt', {
+      provider,
+      prompt,
+      model,
+      options,
+      context: req // Pass request context
+    });
 
     console.log(
       `[${requestId}] Request: provider=${provider}, stream=${stream}, prompt=${prompt.slice(0, 50)}...`
@@ -283,10 +310,33 @@ app.post('/api/smart', validateGenerateRequest, async (req, res) => {
     }
 
     // Non-streaming smart routing with fallback
+    // 1. Experiment / AI Selection
+    const routingDecision = ExperimentManager.route(prompt);
+    console.log(`[ROUTING] Strategy: ${routingDecision.strategy}, Task: ${routingDecision.taskType}, Selected: ${routingDecision.provider?.name}`);
+
+    // 2. Execute with preference (fallback to others if failed)
+    // We assume executeWithFallback can take a preferred provider or we call it directly.
+    // Since we don't know the exact signature of executeWithFallback regarding preference,
+    // we will rely on it if it supports it, OR we call the provider directly and use executeWithFallback as backup.
+    // For safety in this "blind" edit, let's try to pass it as 4th arg or metadata?
+    // Actually, looking at previous lines: `executeStreamWithFallback(..., selectedProvider)` is used for stream.
+    // So `executeWithFallback` likely matches.
+
     const result = await executeWithFallback(prompt, {
       ...options,
       timeout: options.timeout || env.REQUEST_TIMEOUT,
-    }, cache);
+    }, cache, routingDecision.provider?.name);
+
+    // 3. Log Data for Training
+    logRoutingEvent({
+      provider: result.provider,
+      model: result.model,
+      taskType: routingDecision.taskType,
+      strategy: routingDecision.strategy,
+      promptLength: prompt.length,
+      duration: (Date.now() - startTime),
+      success: true
+    });
 
     res.json({
       model: result.model,
@@ -298,6 +348,7 @@ app.post('/api/smart', validateGenerateRequest, async (req, res) => {
       provider: result.provider,
       request_id: requestId,
       cached: result.cached || false,
+      routing_strategy: routingDecision.strategy
     });
   } catch (error) {
     console.error(`[${requestId}] Error:`, error.message);

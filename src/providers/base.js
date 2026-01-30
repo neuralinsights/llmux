@@ -153,6 +153,30 @@ class BaseProvider {
   }
 
   /**
+   * Get Standard Request Headers (including Helicone if enabled)
+   * @param {Object} options - Request options
+   * @returns {Object} Headers
+   */
+  getRequestHeaders(options = {}) {
+    const { getHeliconeHeaders } = require('../integrations/helicone');
+    const baseHeaders = {
+      'Content-Type': 'application/json',
+    };
+
+    const heliconeHeaders = getHeliconeHeaders({
+      userId: options.userId,
+      sessionId: options.sessionId,
+      metadata: {
+        provider: this.name,
+        model: options.model || this.config.defaultModel,
+        ...options.metadata
+      }
+    });
+
+    return { ...baseHeaders, ...heliconeHeaders };
+  }
+
+  /**
    * Call the provider (non-streaming)
    * @abstract
    * @param {string} prompt - The prompt

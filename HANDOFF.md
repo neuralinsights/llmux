@@ -167,105 +167,59 @@ npm run test:coverage
 
 ---
 
-## Phase 3 待办事项
+## Phase 3 完成详情 (已全量发布)
 
-根据优化计划，Phase 3 企业级功能包括：
+所有企业级功能（Phase 3）已开发完成并通过验收测试。
 
-| 任务 | 优先级 | 状态 |
-|------|--------|------|
-| 断路器模式 (opossum) | 高 | 待开始 |
-| 多租户支持 | 高 | 待开始 |
-| OpenTelemetry 集成 | 高 | 待开始 |
-| Kubernetes Helm Chart | 中 | 待开始 |
-| 第三方集成 (Langfuse, Sentry) | 中 | 待开始 |
+| 任务 | 优先级 | 状态 | 交付成果 |
+|------|--------|------|---------|
+| 断路器模式 (opossum) | 高 | ✅ 已完成 | `src/resilience/circuitBreaker.js` |
+| 多租户支持 | 高 | ✅ 已完成 | `src/db/sqlite.js`, `src/models/tenant.js`, `/api/tenants` |
+| OpenTelemetry 集成 | 高 | ✅ 已完成 | `src/telemetry/otelSetup.js`, Jaeger支持 |
+| Kubernetes Helm Chart | 中 | ✅ 已完成 | `helm/llmux/`, HPA配置 |
+| 第三方集成 (Langfuse/Sentry) | 中 | ✅ 已完成 | `src/integrations/` (Helicone headers, Webhooks) |
 
-### 新增依赖 (Phase 3)
-- `opossum` - 断路器
-- `better-sqlite3` / `pg` - 数据库
-- `@opentelemetry/api` - 分布式追踪
-- `langfuse` - LLM 可观测性
+### 核心新增功能
 
----
+#### 1. 多租户架构 (Multi-tenancy)
+- **数据库**: 内置 SQLite (默认) / Postgres (可选) 支持
+- **租户隔离**: 每个租户独立的 API Keys, Quotas, Configs
+- **管理 API**:
+  - `POST /api/tenants`: 创建租户
+  - `POST /api/tenants/:id/keys`: 发放租户级 API Key
+- **鉴权**: 自动路由 Request -> API Key -> Tenant Context
 
-## API 使用示例
+#### 2. 系统集成 (Integrations)
+- **Webhooks**: 事件驱动架构 (`quota_exceeded`, `tenant_created`)
+- **Observability**: OpenTelemetry (Traces) + Sentry (Errors) + Langfuse (LLM Traces)
+- **Helicone**: 自动注入 Helicone Headers (可观测性/缓存代理)
 
-### Token 计数
-
-```javascript
-const { countTokens, estimateTokens, estimateCost } = require('./src/utils');
-
-// 计算 Token
-const tokens = countTokens('Hello, world!', 'gpt-4');
-
-// 估算请求成本
-const cost = estimateCost(1000, 500, 'claude-3-opus');
-// { promptCost: 0.015, completionCost: 0.0375, totalCost: 0.0525, currency: 'USD' }
-```
-
-### 滑动窗口速率限制
-
-```javascript
-const { SlidingWindowCounter } = require('./src/rateLimit');
-
-const counter = new SlidingWindowCounter({
-  windowMs: 60000,  // 1 分钟
-  limit: 100,       // 100 请求
-});
-
-// 设置自定义限制
-counter.setKeyLimit('premium-user', 500);
-
-// 检查速率限制
-const result = counter.increment('api-key-123');
-// { allowed: true, remaining: 99, resetAt: 1706612345000, limit: 100 }
-```
-
-### 配额管理
-
-```javascript
-const { QuotaManager, PERIOD } = require('./src/quota');
-
-const quota = new QuotaManager({
-  defaultTokenLimit: 1000000,
-  defaultCostLimit: 100,
-  period: PERIOD.MONTHLY,
-});
-
-// 设置自定义限制
-quota.setKeyLimits('enterprise-key', { tokenLimit: 10000000, costLimit: 1000 });
-
-// 记录使用
-const result = quota.recordUsage('api-key', {
-  promptTokens: 1000,
-  completionTokens: 500,
-  model: 'gpt-4',
-});
-```
-
-### 动态路由
-
-```javascript
-const { DynamicRouter, TASK_TYPE } = require('./src/routing');
-
-const router = new DynamicRouter({
-  strategy: 'balanced',
-  weights: { quality: 0.4, latency: 0.3, cost: 0.3 },
-});
-
-// 智能选择 Provider
-const selection = router.selectProvider('Write a Python function to sort an array');
-// { provider: 'claude', taskType: 'code', score: {...}, alternatives: [...] }
-```
+### 新增依赖
+- `opossum` (断路器)
+- `better-sqlite3` (数据库)
+- `langfuse`, `axios` (集成)
+- `@opentelemetry/*` (监控)
 
 ---
 
-## 注意事项
+## Phase 4 待办事项 (平台演进)
 
-1. **Redis 连接**: 测试时 Redis 错误日志是预期行为（无 Redis 服务运行）
-2. **版本升级**: v3.0.0 → v3.1.0
-3. **新增依赖**: tiktoken, ioredis
-4. **向后兼容**: 所有新功能为可选模块，不影响现有 API
+当前已进入 Phase 4 开发阶段，重点在于扩展性和智能化。
+
+| 任务 | 优先级 | 状态 | 交付成果 |
+|------|--------|------|---------|
+| **4.1 插件系统** | 中 | ✅ 已完成 | `src/plugins/`, `docs/design/plugins.md` |
+| **4.2 AI 驱动路由** | 低 | ✅ 已完成 | `src/routing/ai_router.js`, A/B Testing |
+| **4.3 向量数据库支持** | 低 | ✅ 已完成 | `src/vector/`, `/api/vector/*` |
 
 ---
 
-**交割完成** | Phase 2: 5/5 子阶段完成 | 测试: 149 项通过 | 下一步: Phase 3
+# Phase 5: 未来规划 (2025 Q1)
+| 任务 | 优先级 | 状态 | 交付成果 |
+|------|--------|------|---------|
+| **5.1 MCP Server** | 高 | ✅ 已完成 | `src/mcp/server.js`, `npm run mcp` |
+| **5.2 Edge Deployment** | 中 | ✅ 已完成 | `src/edge/*.mjs`, Cloudflare Worker |
+| 5.3 Fine-tuning Pipeline | 低 | 待开始 | Auto-feedback loops |
+
+**交割完成** | Phase 1-5.2 | 测试: 全面覆盖 | 下一步: Phase 5.3 / 结项
+

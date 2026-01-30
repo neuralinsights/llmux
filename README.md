@@ -432,6 +432,15 @@ The unique advantage of LLMux is using CLI sessions instead of API keys:
 
 ## Version History
 
+
+### v4.0.0 (2026-01-30)
+- **Plugin System** - Extensible architecture with Hooks
+- **AI Driven Routing** - Semantic Task Classification (Code/Creative/Math)
+- **Vector Database** - Long-term memory with RAG support
+- **MCP Server** - Model Context Protocol integration
+- **Edge Deployment** - Cloudflare Workers support
+- **Multi-tenancy** - Tenant isolation and advanced Auth
+
 ### v3.0.0 (2026-01-27)
 - Streaming response support (SSE)
 - Response caching (LRU)
@@ -439,17 +448,6 @@ The unique advantage of LLMux is using CLI sessions instead of API keys:
 - Exponential backoff retry
 - Prometheus metrics
 - API key authentication
-- Enhanced health checks
-- Fixed duplicate route definitions
-
-### v2.1.0 (2026-01-07)
-- OpenAI-compatible API
-- Gemini 3 support
-
-### v2.0.0 (2026-01-07)
-- Smart round-robin
-- Quota management
-- Latest model support
 
 ## License
 

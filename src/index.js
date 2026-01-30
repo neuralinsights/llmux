@@ -7,12 +7,25 @@
 
 const { app, initializeCache } = require('./app');
 const { env, PROVIDER_CONFIG } = require('./config');
+const { initializeDatabase, getDatabase } = require('./db');
+const { initializeOtel } = require('./telemetry/otelSetup');
+const PluginLoader = require('./plugins/loader');
 
 /**
  * Start the server
  */
 async function main() {
   try {
+    // Initialize OpenTelemetry
+    await initializeOtel({ serviceName: 'llmux-service' });
+
+    // Initialize Database
+    await initializeDatabase();
+    console.log(`[INIT] Database initialized (backend: ${process.env.DB_BACKEND || 'sqlite'})`);
+
+    // Load Plugins
+    await PluginLoader.loadAll();
+
     // Initialize cache
     await initializeCache();
     console.log(`[INIT] Cache initialized (backend: ${env.CACHE_BACKEND})`);

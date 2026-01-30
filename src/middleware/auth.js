@@ -37,7 +37,7 @@ const PUBLIC_ENDPOINTS = [
  * @param {Object} res - Express response
  * @param {Function} next - Next middleware
  */
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
   // Public endpoints don't require authentication
   if (PUBLIC_ENDPOINTS.includes(req.path)) {
     return next();
@@ -56,7 +56,27 @@ function authMiddleware(req, res, next) {
   }
 
   const key = authHeader.slice(7);
-  const keyInfo = API_KEYS.get(key);
+
+  // 1. Check Legacy/Env Keys
+  let keyInfo = API_KEYS.get(key);
+
+  // 2. Check Database Keys
+  if (!keyInfo) {
+    try {
+      const ApiKey = require('../models/apiKey');
+      const dbKey = await ApiKey.verify(key);
+      if (dbKey) {
+        keyInfo = {
+          userId: dbKey.tenant_id, // Map tenant_id to userId for now
+          projectId: 'tenant-project',
+          scopes: dbKey.scopes,
+          tenantId: dbKey.tenant_id
+        };
+      }
+    } catch (err) {
+      console.error('Auth DB check failed', err);
+    }
+  }
 
   if (!keyInfo) {
     return res.status(401).json({ error: 'Invalid API key' });
@@ -65,6 +85,7 @@ function authMiddleware(req, res, next) {
   // Attach user info to request
   req.userId = keyInfo.userId;
   req.projectId = keyInfo.projectId;
+  req.tenantId = keyInfo.tenantId; // Attach tenantId
   next();
 }
 
