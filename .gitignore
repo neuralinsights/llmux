@@ -51,11 +51,15 @@ temp/
 .gemini/
 **/CLAUDE.md
 
+# Internal development documents (not for customers)
+.planning/
+E2E_TEST_REPORT.md
+TODO.md
+HANDOFF.md
+
 # Scratchpads
 declarative-*.md
-HANDOFF.md
 *.log
-
 
 # Personal deployment scripts (not for distribution)
 deploy-to-nas.sh
