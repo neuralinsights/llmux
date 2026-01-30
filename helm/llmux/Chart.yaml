@@ -1,0 +1,25 @@
+apiVersion: v2
+name: llmux
+description: LLMux - Multi-provider LLM gateway with streaming, caching, and load balancing
+type: application
+version: 0.1.0
+appVersion: "3.1.0"
+keywords:
+  - llm
+  - ai
+  - gateway
+  - proxy
+  - openai
+  - claude
+  - gemini
+  - ollama
+maintainers:
+  - name: LLMux Team
+home: https://github.com/llmux/llmux
+sources:
+  - https://github.com/llmux/llmux
+dependencies:
+  - name: redis
+    version: "~18.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled

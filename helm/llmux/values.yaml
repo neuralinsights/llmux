@@ -1,0 +1,189 @@
+# LLMux Helm Chart Values
+# Override these values in your deployment
+
+# Replica count (for horizontal scaling)
+replicaCount: 1
+
+# Container image configuration
+image:
+  repository: llmux/llmux
+  pullPolicy: IfNotPresent
+  tag: ""  # Defaults to appVersion
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Service account configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod annotations and labels
+podAnnotations: {}
+podLabels: {}
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8765
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: llmux.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: llmux-tls
+  #    hosts:
+  #      - llmux.local
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# LLMux specific configuration
+llmux:
+  # Server configuration
+  port: 8765
+  logLevel: "info"
+
+  # Cache configuration
+  cache:
+    backend: "memory"  # memory or redis
+    ttl: 3600
+    maxSize: 1000
+
+  # Rate limiting
+  rateLimit:
+    enabled: true
+    windowMs: 60000
+    maxRequests: 100
+
+  # Circuit breaker
+  circuitBreaker:
+    enabled: true
+    timeout: 30000
+    errorThresholdPercentage: 50
+    resetTimeout: 30000
+
+  # OpenTelemetry
+  otel:
+    enabled: false
+    endpoint: "http://otel-collector:4318/v1/traces"
+    serviceName: "llmux"
+
+  # Provider API keys (use secrets in production)
+  providers:
+    openai:
+      enabled: true
+      apiKeySecret: "llmux-secrets"
+      apiKeySecretKey: "OPENAI_API_KEY"
+    claude:
+      enabled: true
+      apiKeySecret: "llmux-secrets"
+      apiKeySecretKey: "ANTHROPIC_API_KEY"
+    gemini:
+      enabled: true
+      apiKeySecret: "llmux-secrets"
+      apiKeySecretKey: "GOOGLE_API_KEY"
+    ollama:
+      enabled: false
+      baseUrl: "http://ollama:11434"
+
+# Redis configuration (Bitnami subchart)
+redis:
+  enabled: false
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: false
+  replica:
+    replicaCount: 0
+
+# Extra environment variables
+extraEnv: []
+  # - name: CUSTOM_VAR
+  #   value: "custom-value"
+
+# Extra volumes
+extraVolumes: []
+
+# Extra volume mounts
+extraVolumeMounts: []
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Network policy
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: []

@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "llmux.fullname" . }}
+  labels:
+    {{- include "llmux.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "llmux.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "llmux.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "llmux.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.llmux.port }}
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: PORT
+              value: {{ .Values.llmux.port | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.llmux.logLevel | quote }}
+            - name: CACHE_BACKEND
+              value: {{ .Values.llmux.cache.backend | quote }}
+            - name: CACHE_TTL
+              value: {{ .Values.llmux.cache.ttl | quote }}
+            - name: CACHE_MAX_SIZE
+              value: {{ .Values.llmux.cache.maxSize | quote }}
+            {{- if eq .Values.llmux.cache.backend "redis" }}
+            - name: REDIS_URL
+              value: {{ include "llmux.redisUrl" . | quote }}
+            {{- end }}
+            - name: RATE_LIMIT_ENABLED
+              value: {{ .Values.llmux.rateLimit.enabled | quote }}
+            - name: RATE_LIMIT_WINDOW_MS
+              value: {{ .Values.llmux.rateLimit.windowMs | quote }}
+            - name: RATE_LIMIT_MAX_REQUESTS
+              value: {{ .Values.llmux.rateLimit.maxRequests | quote }}
+            - name: CIRCUIT_BREAKER_ENABLED
+              value: {{ .Values.llmux.circuitBreaker.enabled | quote }}
+            - name: CIRCUIT_BREAKER_TIMEOUT
+              value: {{ .Values.llmux.circuitBreaker.timeout | quote }}
+            - name: CIRCUIT_BREAKER_ERROR_THRESHOLD
+              value: {{ .Values.llmux.circuitBreaker.errorThresholdPercentage | quote }}
+            - name: CIRCUIT_BREAKER_RESET_TIMEOUT
+              value: {{ .Values.llmux.circuitBreaker.resetTimeout | quote }}
+            - name: OTEL_ENABLED
+              value: {{ .Values.llmux.otel.enabled | quote }}
+            {{- if .Values.llmux.otel.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.llmux.otel.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.llmux.otel.serviceName | quote }}
+            {{- end }}
+            {{- if .Values.llmux.providers.openai.enabled }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llmux.providers.openai.apiKeySecret }}
+                  key: {{ .Values.llmux.providers.openai.apiKeySecretKey }}
+            {{- end }}
+            {{- if .Values.llmux.providers.claude.enabled }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llmux.providers.claude.apiKeySecret }}
+                  key: {{ .Values.llmux.providers.claude.apiKeySecretKey }}
+            {{- end }}
+            {{- if .Values.llmux.providers.gemini.enabled }}
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llmux.providers.gemini.apiKeySecret }}
+                  key: {{ .Values.llmux.providers.gemini.apiKeySecretKey }}
+            {{- end }}
+            {{- if .Values.llmux.providers.ollama.enabled }}
+            - name: OLLAMA_BASE_URL
+              value: {{ .Values.llmux.providers.ollama.baseUrl | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.extraVolumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

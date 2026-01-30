@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "llmux.fullname" . }}-config
+  labels:
+    {{- include "llmux.labels" . | nindent 4 }}
+data:
+  PORT: {{ .Values.llmux.port | quote }}
+  LOG_LEVEL: {{ .Values.llmux.logLevel | quote }}
+  CACHE_BACKEND: {{ .Values.llmux.cache.backend | quote }}
+  CACHE_TTL: {{ .Values.llmux.cache.ttl | quote }}
+  CACHE_MAX_SIZE: {{ .Values.llmux.cache.maxSize | quote }}
+  RATE_LIMIT_ENABLED: {{ .Values.llmux.rateLimit.enabled | quote }}
+  RATE_LIMIT_WINDOW_MS: {{ .Values.llmux.rateLimit.windowMs | quote }}
+  RATE_LIMIT_MAX_REQUESTS: {{ .Values.llmux.rateLimit.maxRequests | quote }}
+  CIRCUIT_BREAKER_ENABLED: {{ .Values.llmux.circuitBreaker.enabled | quote }}
+  OTEL_ENABLED: {{ .Values.llmux.otel.enabled | quote }}
+  {{- if .Values.llmux.otel.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.llmux.otel.endpoint | quote }}
+  OTEL_SERVICE_NAME: {{ .Values.llmux.otel.serviceName | quote }}
+  {{- end }}
