@@ -1,9 +1,14 @@
-# LLMux v3.0.0
+# LLMux v4.0.0
 
-> **LLM Multiplexer** - Unified HTTP API Gateway for multiple AI providers, supporting Claude, Gemini, Codex, and Ollama
+> **LLM Multiplexer** - AI Gateway with Plugins, Smart Routing, Vector Memory, and MCP Support
 
 ## Features
 
+- **Plugin System** - Extend functionality with custom hooks
+- **AI Smart Routing** - Semantically routes tasks to optimal models
+- **Vector Memory (RAG)** - Long-term memory storage
+- **MCP Server** - Official Model Context Protocol integration
+- **Edge Ready** - Stateless worker for Cloudflare deployment
 - **Zero API Key Storage** - Uses CLI session authentication, no sensitive credentials to manage
 - **Streaming Responses (SSE)** - Real-time output with OpenAI-compatible format
 - **Smart Caching** - LRU in-memory cache with optional Redis, reduces costs by 40%+
