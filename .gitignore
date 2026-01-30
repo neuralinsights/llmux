@@ -53,6 +53,7 @@ temp/
 
 # Scratchpads
 declarative-*.md
+HANDOFF.md
 *.log
 
 
